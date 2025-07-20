@@ -232,6 +232,14 @@ QToolTip {
     padding: 6px;
     font-size: 9pt;
 }
+
+/* Spectrum Analyzer Styling */
+SpectrumAnalyzer {
+    background-color: #2b2b2b;
+    border: none;
+    border-radius: 0px;
+    margin: 4px;
+}
 """
 
 def apply_theme(app):

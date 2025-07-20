@@ -4,6 +4,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QIcon, QFont
 from audio_manager import AudioManager, AudioDevice
 from settings_manager import SettingsManager
+from spectrum_analyzer import SpectrumAnalyzer
 
 
 class MainWindow(QMainWindow):
@@ -19,7 +20,7 @@ class MainWindow(QMainWindow):
         # UI components
         self.device_combo = None
         self.mute_button = None
-        self.status_label = None
+        self.spectrum_analyzer = None
         
         # Setup UI and connections
         self.setup_ui()
@@ -32,8 +33,8 @@ class MainWindow(QMainWindow):
     def setup_ui(self):
         """Setup the user interface"""
         self.setWindowTitle("Audio Input Streamer")
-        self.setMinimumSize(350, 100)
-        self.resize(400, 110)
+        self.setMinimumSize(350, 200)
+        self.resize(450, 350)
         # Remove maximum size constraint to allow proper resizing
         self.setMaximumSize(16777215, 16777215)  # Qt's QWIDGETSIZE_MAX
         
@@ -68,11 +69,11 @@ class MainWindow(QMainWindow):
         
         layout.addLayout(device_row)
         
-        # Status label (smaller, at bottom)
-        self.status_label = QLabel("Initializing...")
-        self.status_label.setObjectName("status_label")
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        layout.addWidget(self.status_label)
+        # Spectrum analyzer - takes up the rest of the window
+        self.spectrum_analyzer = SpectrumAnalyzer()
+        # Set size policy to expand in all directions
+        self.spectrum_analyzer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        layout.addWidget(self.spectrum_analyzer, 1)  # Give it stretch factor to fill remaining space
     
     def setup_connections(self):
         """Setup signal-slot connections"""
@@ -81,6 +82,7 @@ class MainWindow(QMainWindow):
         self.audio_manager.streaming_started.connect(self.on_streaming_started)
         self.audio_manager.streaming_stopped.connect(self.on_streaming_stopped)
         self.audio_manager.error_occurred.connect(self.show_error)
+        self.audio_manager.audio_data_ready.connect(self.spectrum_analyzer.add_audio_data)
         
         # UI signals
         self.device_combo.currentTextChanged.connect(self.on_device_changed)
@@ -137,9 +139,9 @@ class MainWindow(QMainWindow):
         self.mute_button.style().polish(self.mute_button)
     
     def update_status(self, message: str, color: str):
-        """Update status label"""
-        self.status_label.setText(message)
-        self.status_label.setStyleSheet(f"color: {color};")
+        """Update status (now shown in window title or tooltip)"""
+        # Show status in window title for minimal UI
+        self.setWindowTitle(f"Audio Input Streamer - {message}")
     
     def on_streaming_started(self, device_name: str):
         """Handle streaming started"""
@@ -155,6 +157,8 @@ class MainWindow(QMainWindow):
         self.mute_button.setProperty("muted", False)
         self.mute_button.style().unpolish(self.mute_button)
         self.mute_button.style().polish(self.mute_button)
+        # Clear spectrum when stopped
+        self.spectrum_analyzer.clear_spectrum()
     
     def show_error(self, error_message: str):
         """Show error message"""

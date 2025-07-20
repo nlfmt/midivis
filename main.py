@@ -11,8 +11,9 @@ Author: Audio Streamer Team
 
 import sys
 import os
+import signal
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QIcon
 
 # Add current directory to path for imports
@@ -41,6 +42,25 @@ def setup_application():
     return app
 
 
+def setup_signal_handlers(window):
+    """Setup signal handlers for graceful shutdown"""
+    def signal_handler(signum, frame):
+        print(f"\nReceived signal {signum}, shutting down gracefully...")
+        if window:
+            window.close()
+        QApplication.quit()
+    
+    # Register signal handlers
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    # Enable periodic processing of signals in Qt
+    timer = QTimer()
+    timer.timeout.connect(lambda: None)  # Allow Python signal handlers to run
+    timer.start(500)  # Check every 500ms
+    return timer
+
+
 def main():
     """Main application entry point"""
     try:
@@ -50,6 +70,9 @@ def main():
         # Create and show main window
         window = MainWindow()
         window.show()
+        
+        # Setup signal handlers for Ctrl+C
+        signal_timer = setup_signal_handlers(window)
         
         # Start event loop
         sys.exit(app.exec())

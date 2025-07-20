@@ -26,6 +26,7 @@ class AudioManager(QObject):
     streaming_started = Signal(str)    # device_name
     streaming_stopped = Signal()
     error_occurred = Signal(str)       # error_message
+    audio_data_ready = Signal(object)  # numpy array of audio data for spectrum analysis
     
     def __init__(self):
         super().__init__()
@@ -63,6 +64,9 @@ class AudioManager(QObject):
         """Audio stream callback function"""
         if status:
             print(f"Audio callback status: {status}")
+        
+        # Emit audio data for spectrum analysis (always emit, even when muted)
+        self.audio_data_ready.emit(indata.copy())
         
         if self.is_muted:
             outdata[:] = 0  # Output silence when muted
