@@ -6,21 +6,6 @@ from audio_manager import AudioManager, AudioDevice
 from settings_manager import SettingsManager
 
 
-class StatusIndicator(QFrame):
-    """Custom status indicator widget"""
-    def __init__(self):
-        super().__init__()
-        self.setObjectName("status_indicator")
-        self.setFixedSize(16, 16)
-        self.set_status("stopped")
-    
-    def set_status(self, status: str):
-        """Set the status (streaming, error, stopped)"""
-        self.setProperty("status", status)
-        self.style().unpolish(self)
-        self.style().polish(self)
-
-
 class MainWindow(QMainWindow):
     """Main application window"""
     
@@ -34,9 +19,7 @@ class MainWindow(QMainWindow):
         # UI components
         self.device_combo = None
         self.mute_button = None
-        self.refresh_button = None
         self.status_label = None
-        self.status_indicator = None
         
         # Setup UI and connections
         self.setup_ui()
@@ -49,8 +32,8 @@ class MainWindow(QMainWindow):
     def setup_ui(self):
         """Setup the user interface"""
         self.setWindowTitle("Audio Input Streamer")
-        self.setMinimumSize(500, 350)
-        self.resize(550, 400)
+        self.setMinimumSize(350, 100)
+        self.resize(400, 110)
         # Remove maximum size constraint to allow proper resizing
         self.setMaximumSize(16777215, 16777215)  # Qt's QWIDGETSIZE_MAX
         
@@ -60,76 +43,36 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(main_widget)
         
         layout = QVBoxLayout(main_widget)
-        layout.setSpacing(20)
-        layout.setContentsMargins(30, 30, 30, 30)
+        layout.setSpacing(8)
+        layout.setContentsMargins(12, 12, 12, 12)
         
-        # Title
-        title_label = QLabel("Audio Input Streamer")
-        title_label.setObjectName("title_label")
-        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title_label)
-        
-        # Device selection section
-        device_frame = QFrame()
-        device_layout = QVBoxLayout(device_frame)
-        device_layout.setSpacing(15)
-        device_layout.setContentsMargins(20, 20, 20, 20)
-        
-        device_label = QLabel("Select Input Device:")
-        device_layout.addWidget(device_label)
-        
-        # Device combo and refresh button row
+        # Device selection row
         device_row = QHBoxLayout()
-        device_row.setSpacing(15)
+        device_row.setSpacing(8)
         
         self.device_combo = QComboBox()
-        self.device_combo.setMinimumHeight(50)
+        self.device_combo.setMinimumHeight(30)
         self.device_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        # Add a placeholder to show the dropdown arrow works
+        self.device_combo.setPlaceholderText("Select device...")
         self.refresh_devices()
         device_row.addWidget(self.device_combo, 1)
         
-        self.refresh_button = QPushButton("⟳")
-        self.refresh_button.setObjectName("refresh_button")
-        self.refresh_button.setFixedSize(50, 50)
-        self.refresh_button.setToolTip("Refresh device list")
-        device_row.addWidget(self.refresh_button)
-        
-        device_layout.addLayout(device_row)
-        layout.addWidget(device_frame)
-        
-        # Controls section
-        controls_frame = QFrame()
-        controls_layout = QHBoxLayout(controls_frame)
-        controls_layout.setSpacing(20)
-        controls_layout.setContentsMargins(20, 20, 20, 20)
-        
-        self.mute_button = QPushButton("🔊 Unmuted")
-        self.mute_button.setObjectName("mute_button")
-        self.mute_button.setMinimumHeight(55)
-        self.mute_button.setMinimumWidth(200)
+        # Combined status/mute button
+        self.mute_button = QPushButton("Stopped")
+        self.mute_button.setObjectName("status_mute_button")
+        self.mute_button.setFixedSize(80, 30)
         self.mute_button.setProperty("muted", False)
-        controls_layout.addWidget(self.mute_button)
+        self.mute_button.setToolTip("Click to mute/unmute")
+        device_row.addWidget(self.mute_button)
         
-        layout.addWidget(controls_frame)
+        layout.addLayout(device_row)
         
-        # Status section
-        status_frame = QFrame()
-        status_layout = QHBoxLayout(status_frame)
-        status_layout.setContentsMargins(20, 15, 20, 15)
-        status_layout.setSpacing(15)
-        
+        # Status label (smaller, at bottom)
         self.status_label = QLabel("Initializing...")
         self.status_label.setObjectName("status_label")
-        self.status_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        status_layout.addWidget(self.status_label, 1)
-        
-        self.status_indicator = StatusIndicator()
-        status_layout.addWidget(self.status_indicator)
-        
-        layout.addWidget(status_frame)
-        
-        # Add some stretch at the bottom
-        layout.addStretch()
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        layout.addWidget(self.status_label)
     
     def setup_connections(self):
         """Setup signal-slot connections"""
@@ -142,7 +85,6 @@ class MainWindow(QMainWindow):
         # UI signals
         self.device_combo.currentTextChanged.connect(self.on_device_changed)
         self.mute_button.clicked.connect(self.toggle_mute)
-        self.refresh_button.clicked.connect(self.refresh_devices)
     
     def refresh_devices(self):
         """Refresh the device list"""
@@ -182,11 +124,13 @@ class MainWindow(QMainWindow):
         is_muted = self.audio_manager.toggle_mute()
         
         if is_muted:
-            self.mute_button.setText("🔇 Muted")
+            self.mute_button.setText("Muted")
             self.mute_button.setProperty("muted", True)
+            self.mute_button.setToolTip("Click to unmute")
         else:
-            self.mute_button.setText("🔊 Unmuted")
+            self.mute_button.setText("Streaming")
             self.mute_button.setProperty("muted", False)
+            self.mute_button.setToolTip("Click to mute")
         
         # Refresh button style
         self.mute_button.style().unpolish(self.mute_button)
@@ -196,22 +140,21 @@ class MainWindow(QMainWindow):
         """Update status label"""
         self.status_label.setText(message)
         self.status_label.setStyleSheet(f"color: {color};")
-        
-        # Update status indicator
-        if "error" in message.lower() or "failed" in message.lower():
-            self.status_indicator.set_status("error")
-        elif "streaming" in message.lower():
-            self.status_indicator.set_status("streaming")
-        else:
-            self.status_indicator.set_status("stopped")
     
     def on_streaming_started(self, device_name: str):
         """Handle streaming started"""
-        self.status_indicator.set_status("streaming")
+        if not self.audio_manager.is_muted:
+            self.mute_button.setText("Streaming")
+            self.mute_button.setProperty("muted", False)
+            self.mute_button.style().unpolish(self.mute_button)
+            self.mute_button.style().polish(self.mute_button)
     
     def on_streaming_stopped(self):
         """Handle streaming stopped"""
-        self.status_indicator.set_status("stopped")
+        self.mute_button.setText("Stopped")
+        self.mute_button.setProperty("muted", False)
+        self.mute_button.style().unpolish(self.mute_button)
+        self.mute_button.style().polish(self.mute_button)
     
     def show_error(self, error_message: str):
         """Show error message"""

@@ -13,7 +13,7 @@ QWidget {
     background-color: #2b2b2b;
     color: #ffffff;
     font-family: 'Segoe UI', Arial, sans-serif;
-    font-size: 12pt;
+    font-size: 9pt;
 }
 
 /* Frame and Container Styling */
@@ -39,7 +39,8 @@ QLabel {
 
 QLabel#status_label {
     color: #cccccc;
-    font-size: 9pt;
+    font-size: 8pt;
+    margin: 0px;
 }
 
 QLabel#title_label {
@@ -49,16 +50,19 @@ QLabel#title_label {
     margin-bottom: 10px;
 }
 
-/* ComboBox Styling */
+/* ComboBox Styling - Modern minimal design with no dropdown arrow */
 QComboBox {
     background-color: #404040;
-    border: 2px solid #555555;
-    border-radius: 8px;
-    padding: 15px 20px;
+    border: 1px solid #555555;
+    border-radius: 6px;
+    padding: 8px 12px;
     color: #ffffff;
-    font-size: 12pt;
-    min-height: 35px;
-    max-height: 50px;
+    font-size: 9pt;
+    min-height: 18px;
+    max-height: 30px;
+    /* Remove 3D effects */
+    border-style: solid;
+    outline: none;
 }
 
 QComboBox:hover {
@@ -69,40 +73,41 @@ QComboBox:hover {
 QComboBox:focus {
     border-color: #0078d4;
     background-color: #454545;
+    outline: none;
 }
 
+/* Completely remove dropdown button for minimal design */
 QComboBox::drop-down {
     border: none;
-    width: 20px;
-    background-color: transparent;
+    background: transparent;
+    width: 0px;
 }
 
+/* Hide the arrow completely */
 QComboBox::down-arrow {
     image: none;
-    border-left: 6px solid transparent;
-    border-right: 6px solid transparent;
-    border-top: 6px solid #cccccc;
-    margin-right: 8px;
+    border: none;
+    width: 0px;
+    height: 0px;
 }
 
-QComboBox::down-arrow:hover {
-    border-top-color: #ffffff;
-}
-
+/* Style the dropdown list */
 QComboBox QAbstractItemView {
     background-color: #404040;
-    border: 2px solid #555555;
+    border: 1px solid #555555;
     border-radius: 6px;
     selection-background-color: #0078d4;
     selection-color: #ffffff;
     color: #ffffff;
     padding: 4px;
+    outline: none;
 }
 
 QComboBox QAbstractItemView::item {
-    height: 40px;
-    padding: 8px 12px;
-    border-radius: 4px;
+    height: 28px;
+    padding: 4px 8px;
+    border-radius: 2px;
+    border: none;
 }
 
 QComboBox QAbstractItemView::item:hover {
@@ -113,17 +118,57 @@ QComboBox QAbstractItemView::item:selected {
     background-color: #0078d4;
 }
 
+/* Custom scrollbar for dropdown - fully rounded (pill-shaped) */
+QComboBox QAbstractItemView QScrollBar:vertical {
+    background-color: #2b2b2b;
+    width: 12px;
+    border: none;
+    border-radius: 6px;
+}
+
+QComboBox QAbstractItemView QScrollBar::handle:vertical {
+    background-color: #555555;
+    border-radius: 6px;
+    min-height: 20px;
+    margin: 2px;
+    /* Make it fully pill-shaped by ensuring radius covers the full width */
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
+}
+
+QComboBox QAbstractItemView QScrollBar::handle:vertical:hover {
+    background-color: #666666;
+}
+
+QComboBox QAbstractItemView QScrollBar::handle:vertical:pressed {
+    background-color: #777777;
+}
+
+QComboBox QAbstractItemView QScrollBar::add-line:vertical,
+QComboBox QAbstractItemView QScrollBar::sub-line:vertical {
+    border: none;
+    background: none;
+    height: 0px;
+}
+
+QComboBox QAbstractItemView QScrollBar::add-page:vertical,
+QComboBox QAbstractItemView QScrollBar::sub-page:vertical {
+    background-color: transparent;
+}
+
 /* Button Styling */
 QPushButton {
     background-color: #0078d4;
     border: none;
-    border-radius: 8px;
+    border-radius: 4px;
     color: #ffffff;
     font-weight: 600;
-    padding: 15px 30px;
-    font-size: 12pt;
-    min-height: 35px;
-    max-height: 55px;
+    padding: 6px 10px;
+    font-size: 9pt;
+    min-height: 18px;
+    max-height: 30px;
 }
 
 QPushButton:hover {
@@ -139,72 +184,34 @@ QPushButton:disabled {
     color: #888888;
 }
 
-/* Mute Button Special Styling */
-QPushButton#mute_button {
-    background-color: #2d5d2d;
-    font-size: 13pt;
-    min-width: 180px;
+/* Status/Mute Button - Green when streaming, Red when muted */
+QPushButton#status_mute_button {
+    background-color: #2d7d2d;
+    font-size: 9pt;
+    font-weight: 600;
+    min-width: 80px;
+    max-width: 80px;
+    padding: 4px 8px;
 }
 
-QPushButton#mute_button:hover {
-    background-color: #3d7d3d;
+QPushButton#status_mute_button:hover {
+    background-color: #3d9d3d;
 }
 
-QPushButton#mute_button:pressed {
-    background-color: #1d4d1d;
+QPushButton#status_mute_button:pressed {
+    background-color: #1d6d1d;
 }
 
-QPushButton#mute_button[muted="true"] {
+QPushButton#status_mute_button[muted="true"] {
     background-color: #7d2d2d;
 }
 
-QPushButton#mute_button[muted="true"]:hover {
+QPushButton#status_mute_button[muted="true"]:hover {
     background-color: #9d3d3d;
 }
 
-QPushButton#mute_button[muted="true"]:pressed {
+QPushButton#status_mute_button[muted="true"]:pressed {
     background-color: #5d1d1d;
-}
-
-/* Refresh Button */
-QPushButton#refresh_button {
-    background-color: #666666;
-    min-width: 50px;
-    font-size: 16pt;
-}
-
-QPushButton#refresh_button:hover {
-    background-color: #777777;
-}
-
-QPushButton#refresh_button:pressed {
-    background-color: #555555;
-}
-
-/* Status Indicator */
-QFrame#status_indicator {
-    background-color: #666666;
-    border: 2px solid #888888;
-    border-radius: 8px;
-    min-width: 12px;
-    max-width: 12px;
-    min-height: 12px;
-    max-height: 12px;
-}
-
-QFrame#status_indicator[status="streaming"] {
-    background-color: #00cc00;
-    border-color: #00aa00;
-}
-
-QFrame#status_indicator[status="error"] {
-    background-color: #ff4444;
-    border-color: #cc0000;
-}
-
-QFrame#status_indicator[status="stopped"] {
-    background-color: #666666;
-    border-color: #888888;
 }
 
 /* Spacing and Layout */
