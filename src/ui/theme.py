@@ -16,6 +16,54 @@ QWidget {
     font-size: 9pt;
 }
 
+/* Custom Title Bar Styling */
+CustomTitleBar {
+    background-color: #363636;
+    border: none;
+}
+
+CustomTitleBar QLabel {
+    color: #ffffff;
+    background-color: transparent;
+    border: none;
+}
+
+CustomTitleBar QPushButton#title_button {
+    background-color: transparent;
+    border: none;
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: bold;
+    border-radius: 0px;
+    text-align: center;
+}
+
+CustomTitleBar QPushButton#title_button:hover {
+    background-color: #555555;
+}
+
+CustomTitleBar QPushButton#title_button:pressed {
+    background-color: #666666;
+}
+
+CustomTitleBar QPushButton#close_button {
+    background-color: transparent;
+    border: none;
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: bold;
+    border-radius: 0px;
+    text-align: center;
+}
+
+CustomTitleBar QPushButton#close_button:hover {
+    background-color: #e74c3c;
+}
+
+CustomTitleBar QPushButton#close_button:pressed {
+    background-color: #c0392b;
+}
+
 /* Frame and Container Styling */
 QFrame {
     background-color: #363636;

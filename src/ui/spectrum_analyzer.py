@@ -183,7 +183,7 @@ class SpectrumAnalyzer(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
         # Draw rounded background frame
-        frame_rect = self.rect().adjusted(1, 1, -1, -1)  # Small margin for border
+        frame_rect = self.rect().adjusted(0, 0, 0, 0)  # No extra margin - use layout margin only
         painter.setPen(QPen(QColor(51, 51, 51), 1))  # Border color
         painter.setBrush(QBrush(self.bg_color))
         painter.drawRoundedRect(frame_rect, 8, 8)  # Rounded corners
@@ -191,8 +191,8 @@ class SpectrumAnalyzer(QWidget):
         if self.num_bars == 0:
             return
         
-        # Calculate bar dimensions with margin for rounded frame
-        margin = 8
+        # Calculate bar dimensions with minimal margin for rounded frame
+        margin = 4  # Reduced margin to match input controls
         width = self.width() - (margin * 2)
         height = self.height() - (margin * 2)
         bar_width = (width / self.num_bars) * self.bar_width_ratio

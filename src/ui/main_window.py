@@ -3,15 +3,21 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QIcon, QFont
 
-# Add src directory to path for imports
-import sys
-import os
-src_dir = os.path.join(os.path.dirname(__file__), 'src')
-sys.path.insert(0, src_dir)
-
-from core.audio_manager import AudioManager, AudioDevice
-from core.settings_manager import SettingsManager
-from ui.spectrum_analyzer import SpectrumAnalyzer
+# Handle imports for both direct execution and package imports
+try:
+    from ..core.audio_manager import AudioManager, AudioDevice
+    from ..core.settings_manager import SettingsManager
+    from .spectrum_analyzer import SpectrumAnalyzer
+except ImportError:
+    import sys
+    import os
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(current_dir)
+    sys.path.insert(0, parent_dir)
+    from core.audio_manager import AudioManager, AudioDevice
+    from core.settings_manager import SettingsManager
+    sys.path.insert(0, current_dir)
+    from spectrum_analyzer import SpectrumAnalyzer
 
 
 class MainWindow(QMainWindow):
@@ -79,71 +85,6 @@ class MainWindow(QMainWindow):
         self.spectrum_analyzer = SpectrumAnalyzer()
         self.spectrum_analyzer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout.addWidget(self.spectrum_analyzer, 1)
-        
-        # Apply dark theme
-        self.apply_dark_theme()
-    
-    def apply_dark_theme(self):
-        """Apply dark theme to the window"""
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #2b2b2b;
-                color: #ffffff;
-            }
-            QComboBox {
-                background-color: #3c3c3c;
-                color: #ffffff;
-                border: 1px solid #555555;
-                border-radius: 4px;
-                padding: 4px 8px;
-                min-height: 20px;
-            }
-            QComboBox::drop-down {
-                border: none;
-                width: 20px;
-            }
-            QComboBox::down-arrow {
-                image: none;
-                border: 2px solid #ffffff;
-                border-top: none;
-                border-right: none;
-                width: 6px;
-                height: 6px;
-                transform: rotate(-45deg);
-                margin-right: 8px;
-            }
-            QComboBox:hover {
-                background-color: #4a4a4a;
-                border-color: #777777;
-            }
-            QComboBox QAbstractItemView {
-                background-color: #3c3c3c;
-                color: #ffffff;
-                border: 1px solid #555555;
-                selection-background-color: #555555;
-            }
-            QPushButton {
-                background-color: #4a4a4a;
-                color: #ffffff;
-                border: 1px solid #666666;
-                border-radius: 4px;
-                padding: 4px 8px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #5a5a5a;
-                border-color: #888888;
-            }
-            QPushButton:pressed {
-                background-color: #3a3a3a;
-            }
-            QPushButton[muted="true"] {
-                background-color: #cc4444;
-            }
-            QPushButton[muted="true"]:hover {
-                background-color: #dd5555;
-            }
-        """)
     
     def setup_connections(self):
         """Setup signal-slot connections"""

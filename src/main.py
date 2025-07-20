@@ -5,6 +5,8 @@ Audio Input Streamer - Qt Version
 A professional audio streaming application that allows you to stream audio 
 from any Windows audio device to your output, with mute functionality.
 Perfect for streaming music over Discord while maintaining control.
+
+Author: Audio Streamer Team
 """
 
 import sys
@@ -14,9 +16,9 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QIcon
 
-# Add src directory to path for imports
-src_dir = os.path.join(os.path.dirname(__file__), 'src')
-sys.path.insert(0, src_dir)
+# Add current directory to path for imports
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, current_dir)
 
 from ui.main_window import MainWindow
 from ui.theme import apply_theme
@@ -30,7 +32,7 @@ def get_icon_path():
         return os.path.join(application_path, 'icon.ico')
     else:
         # Running as script - icon is in assets/icons
-        return os.path.join(os.path.dirname(__file__), 'assets', 'icons', 'icon.ico')
+        return os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'icons', 'icon.ico')
 
 
 def setup_application():
@@ -54,42 +56,53 @@ def setup_application():
     return app
 
 
-def setup_signal_handlers():
+def setup_signal_handlers(window):
     """Setup signal handlers for graceful shutdown"""
     def signal_handler(signum, frame):
-        print(f"\\nReceived signal {signum}, shutting down gracefully...")
+        print(f"\nReceived signal {signum}, shutting down gracefully...")
+        if window:
+            window.close()
         QApplication.quit()
     
-    # Handle Ctrl+C
+    # Register signal handlers
     signal.signal(signal.SIGINT, signal_handler)
-    if hasattr(signal, 'SIGTERM'):
-        signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    # Enable periodic processing of signals in Qt
+    timer = QTimer()
+    timer.timeout.connect(lambda: None)  # Allow Python signal handlers to run
+    timer.start(500)  # Check every 500ms
+    return timer
 
 
 def main():
     """Main application entry point"""
-    # Setup signal handlers first
-    setup_signal_handlers()
-    
-    # Create and setup application
-    app = setup_application()
-    
-    # Make sure Qt handles Ctrl+C properly
-    timer = QTimer()
-    timer.timeout.connect(lambda: None)  # Allow Python to handle signals
-    timer.start(100)
-    
-    # Create and show main window
-    window = MainWindow()
-    window.show()
-    
-    # Run the application
     try:
-        exit_code = app.exec()
-        sys.exit(exit_code)
+        # Setup application
+        app = setup_application()
+        
+        # Create and show main window
+        window = MainWindow()
+        
+        # Set window icon
+        icon_path = get_icon_path()
+        if icon_path and os.path.exists(icon_path):
+            window.setWindowIcon(QIcon(icon_path))
+        
+        window.show()
+        
+        # Setup signal handlers for Ctrl+C
+        signal_timer = setup_signal_handlers(window)
+        
+        # Start event loop
+        sys.exit(app.exec())
+        
     except KeyboardInterrupt:
-        print("\\nApplication interrupted by user")
+        print("\nApplication interrupted by user")
         sys.exit(0)
+    except Exception as e:
+        print(f"Fatal error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
