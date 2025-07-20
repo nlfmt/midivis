@@ -133,12 +133,21 @@ class SpectrumAnalyzer(QWidget):
         # Add small epsilon to avoid log(0)
         magnitude_db = 20 * np.log10(magnitude + 1e-12)
         
-        # Group into frequency bands
+        # Group into frequency bands using energy-weighted approach
         new_spectrum = np.zeros(self.num_bars)
         for i, (low_bin, high_bin) in enumerate(self.bin_indices):
             if high_bin <= len(magnitude_db):
-                # Average the magnitude in this frequency band
-                band_magnitude = np.mean(magnitude_db[low_bin:high_bin])
+                band_data = magnitude_db[low_bin:high_bin]
+                
+                # Convert dB back to linear scale for proper energy weighting
+                linear_magnitudes = 10 ** (band_data / 20)
+                
+                # Use RMS (Root Mean Square) which better represents energy
+                # This gives more weight to stronger frequencies in the band
+                rms_magnitude = np.sqrt(np.mean(linear_magnitudes ** 2))
+                
+                # Convert back to dB
+                band_magnitude = 20 * np.log10(rms_magnitude + 1e-12)
                 
                 # Apply slight high-frequency compensation for better visibility
                 freq_center = np.sqrt(self.get_frequency_for_bin(low_bin) * self.get_frequency_for_bin(high_bin))
