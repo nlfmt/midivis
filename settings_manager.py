@@ -1,0 +1,100 @@
+import json
+import os
+from typing import Optional
+from PySide6.QtCore import QObject, Signal
+
+
+class SettingsManager(QObject):
+    """Manages application settings persistence"""
+    
+    settings_changed = Signal()  # Emitted when settings are saved
+    
+    def __init__(self, settings_file: str = "settings.json"):
+        super().__init__()
+        self.settings_file = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), 
+            settings_file
+        )
+        self._settings = {}
+        self.load_settings()
+    
+    def get_setting(self, key: str, default=None):
+        """Get a setting value"""
+        return self._settings.get(key, default)
+    
+    def set_setting(self, key: str, value):
+        """Set a setting value"""
+        self._settings[key] = value
+    
+    def save_settings(self) -> bool:
+        """Save current settings to file"""
+        try:
+            # Convert QByteArray to base64 string for JSON serialization
+            settings_to_save = {}
+            for key, value in self._settings.items():
+                if hasattr(value, 'toBase64'):  # QByteArray
+                    settings_to_save[key] = value.toBase64().data().decode('utf-8')
+                else:
+                    settings_to_save[key] = value
+            
+            with open(self.settings_file, 'w') as f:
+                json.dump(settings_to_save, f, indent=2)
+            self.settings_changed.emit()
+            return True
+        except Exception as e:
+            print(f"Error saving settings: {e}")
+            return False
+    
+    def load_settings(self) -> bool:
+        """Load settings from file"""
+        try:
+            if os.path.exists(self.settings_file):
+                with open(self.settings_file, 'r') as f:
+                    loaded_settings = json.load(f)
+                
+                # Convert base64 strings back to QByteArray for geometry
+                from PySide6.QtCore import QByteArray
+                for key, value in loaded_settings.items():
+                    if key == "window_geometry" and isinstance(value, str):
+                        try:
+                            self._settings[key] = QByteArray.fromBase64(value.encode('utf-8'))
+                        except:
+                            self._settings[key] = None
+                    else:
+                        self._settings[key] = value
+                return True
+        except Exception as e:
+            print(f"Error loading settings: {e}")
+        
+        # Initialize with defaults if file doesn't exist or loading failed
+        self._settings = {
+            "device_name": "",
+            "window_geometry": None,
+            "theme": "dark"
+        }
+        return False
+    
+    def get_last_device(self) -> Optional[str]:
+        """Get the last used device name"""
+        return self.get_setting("device_name")
+    
+    def set_last_device(self, device_name: str):
+        """Set the last used device name"""
+        self.set_setting("device_name", device_name)
+    
+    def get_window_geometry(self):
+        """Get saved window geometry"""
+        return self.get_setting("window_geometry")
+    
+    def set_window_geometry(self, geometry):
+        """Set window geometry"""
+        self.set_setting("window_geometry", geometry)
+    
+    def get_theme(self) -> str:
+        """Get current theme"""
+        theme = self.get_setting("theme", "dark")
+        return theme if isinstance(theme, str) else "dark"
+    
+    def set_theme(self, theme: str):
+        """Set current theme"""
+        self.set_setting("theme", theme)
