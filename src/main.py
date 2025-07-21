@@ -28,16 +28,8 @@ for path in [current_dir, parent_dir, ui_dir, core_dir]:
         sys.path.insert(0, path)
 
 # Import required modules
-try:
-    from ui.main_window import MainWindow
-    from ui.theme import apply_theme
-except ImportError:
-    try:
-        from main_window import MainWindow
-        from theme import apply_theme
-    except ImportError as e:
-        print(f"Failed to import required modules: {e}")
-        sys.exit(1)
+from ui.main_window import MainWindow
+from ui.theme import apply_theme
 
 
 def get_icon_path():

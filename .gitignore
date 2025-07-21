@@ -9,8 +9,8 @@ __pycache__/
 *.pdb
 
 # Build artifacts and distribution
-build/dist/
-build/build/
+build/
+dist/
 *.spec.bak
 *.exe
 *.app

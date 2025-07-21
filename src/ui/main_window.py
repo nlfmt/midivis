@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-                             QLabel, QComboBox, QPushButton, QFrame, QMessageBox, QSizePolicy)
+                             QLabel, QComboBox, QPushButton, QFrame, QMessageBox, QSizePolicy, QApplication)
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QIcon, QFont
 
@@ -9,15 +9,14 @@ try:
     from ..core.settings_manager import SettingsManager
     from .spectrum_analyzer import SpectrumAnalyzer
 except ImportError:
+    # For direct execution from src directory
     import sys
     import os
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    parent_dir = os.path.dirname(current_dir)
-    sys.path.insert(0, parent_dir)
+    current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    sys.path.insert(0, current_dir)
     from core.audio_manager import AudioManager, AudioDevice
     from core.settings_manager import SettingsManager
-    sys.path.insert(0, current_dir)
-    from spectrum_analyzer import SpectrumAnalyzer
+    from ui.spectrum_analyzer import SpectrumAnalyzer
 
 
 class MainWindow(QMainWindow):

@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 from typing import Optional
 from PySide6.QtCore import QObject, Signal
 
@@ -11,12 +12,32 @@ class SettingsManager(QObject):
     
     def __init__(self, settings_file: str = "settings.json"):
         super().__init__()
-        self.settings_file = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), 
-            settings_file
-        )
+        self.settings_file = self._get_settings_path(settings_file)
         self._settings = {}
         self.load_settings()
+    
+    def _get_settings_path(self, filename: str) -> str:
+        """Get the appropriate path for storing settings"""
+        if getattr(sys, 'frozen', False):
+            # Running as compiled executable - use AppData
+            if os.name == 'nt':  # Windows
+                appdata = os.environ.get('APPDATA')
+                if appdata:
+                    settings_dir = os.path.join(appdata, 'AudioInputStreamer')
+                else:
+                    # Fallback to user home directory
+                    settings_dir = os.path.join(os.path.expanduser('~'), '.AudioInputStreamer')
+            else:
+                # Linux/Mac
+                settings_dir = os.path.join(os.path.expanduser('~'), '.AudioInputStreamer')
+        else:
+            # Running as script - use project directory for development
+            settings_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        
+        # Create directory if it doesn't exist
+        os.makedirs(settings_dir, exist_ok=True)
+        
+        return os.path.join(settings_dir, filename)
     
     def get_setting(self, key: str, default=None):
         """Get a setting value"""

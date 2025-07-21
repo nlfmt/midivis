@@ -3,11 +3,11 @@
 block_cipher = None
 
 a = Analysis(
-    ['../src/main.py'],
-    pathex=['../src'],
+    ['src/main.py'],
+    pathex=['src', '.'],
     binaries=[],
     datas=[
-        ('../assets/icons/icon.ico', '.'),  # Include the icon file
+        ('assets/icons/icon.ico', '.'),  # Include the icon file
     ],
     hiddenimports=[
         'sounddevice',
@@ -54,5 +54,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='../assets/icons/icon.ico',  # Application icon
+    icon='assets/icons/icon.ico',  # Application icon
 )
