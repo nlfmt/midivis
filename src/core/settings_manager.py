@@ -95,13 +95,31 @@ class SettingsManager(QObject):
         }
         return False
     
+    # Device settings methods
+    def get_last_input_device(self) -> Optional[str]:
+        """Get the last used input device name"""
+        return self.get_setting('last_input_device')
+    
+    def set_last_input_device(self, device_name: str):
+        """Set the last used input device name"""
+        self.set_setting('last_input_device', device_name)
+    
+    def get_last_output_device(self) -> Optional[str]:
+        """Get the last used output device name"""
+        return self.get_setting('last_output_device')
+    
+    def set_last_output_device(self, device_name: str):
+        """Set the last used output device name"""
+        self.set_setting('last_output_device', device_name)
+    
+    # Backward compatibility
     def get_last_device(self) -> Optional[str]:
-        """Get the last used device name"""
-        return self.get_setting("device_name")
+        """Get the last used device name (backward compatibility)"""
+        return self.get_last_input_device()
     
     def set_last_device(self, device_name: str):
-        """Set the last used device name"""
-        self.set_setting("device_name", device_name)
+        """Set the last used device name (backward compatibility)"""
+        self.set_last_input_device(device_name)
     
     def get_window_geometry(self):
         """Get saved window geometry"""
