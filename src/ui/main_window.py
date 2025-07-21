@@ -210,3 +210,17 @@ class MainWindow(QMainWindow):
         self.audio_manager.stop_streaming()
         
         event.accept()
+    
+    def showEvent(self, event):
+        """Handle window show event - apply dark title bar on Windows"""
+        super().showEvent(event)
+        
+        # Apply dark title bar if the function is available
+        app = QApplication.instance()
+        if hasattr(app, 'enable_dark_title_bar'):
+            try:
+                # Get the window handle
+                hwnd = int(self.winId())
+                app.enable_dark_title_bar(hwnd)
+            except Exception:
+                pass  # Silently fail if not supported

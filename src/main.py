@@ -16,12 +16,28 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QIcon
 
-# Add current directory to path for imports
+# Add paths for module resolution
 current_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, current_dir)
+parent_dir = os.path.dirname(current_dir)
+ui_dir = os.path.join(current_dir, 'ui')
+core_dir = os.path.join(current_dir, 'core')
 
-from ui.main_window import MainWindow
-from ui.theme import apply_theme
+# Add all necessary paths
+for path in [current_dir, parent_dir, ui_dir, core_dir]:
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
+# Import required modules
+try:
+    from ui.main_window import MainWindow
+    from ui.theme import apply_theme
+except ImportError:
+    try:
+        from main_window import MainWindow
+        from theme import apply_theme
+    except ImportError as e:
+        print(f"Failed to import required modules: {e}")
+        sys.exit(1)
 
 
 def get_icon_path():

@@ -4,7 +4,7 @@ block_cipher = None
 
 a = Analysis(
     ['../src/main.py'],
-    pathex=[],
+    pathex=['../src'],
     binaries=[],
     datas=[
         ('../assets/icons/icon.ico', '.'),  # Include the icon file
@@ -17,6 +17,11 @@ a = Analysis(
         'PySide6.QtCore',
         'PySide6.QtGui',
         'PySide6.QtWidgets',
+        'ui.main_window',
+        'ui.theme',
+        'ui.spectrum_analyzer',
+        'core.audio_manager',
+        'core.settings_manager',
     ],
     hookspath=[],
     hooksconfig={},

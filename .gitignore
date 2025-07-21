@@ -1,5 +1,57 @@
+# Application settings and user data
 settings.json
+
+# Python cache files
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.pdb
+
+# Build artifacts and distribution
+build/dist/
+build/build/
+*.spec.bak
+*.exe
+*.app
+*.dmg
+*.pkg
+
+# PyInstaller build files
+*.spec.orig
+warn-*.txt
+xref-*.html
+
+# Virtual environments
+venv/
+env/
+.env
+.venv
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

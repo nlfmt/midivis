@@ -4,7 +4,6 @@ echo Building Audio Input Streamer...
 REM Check if icon.ico exists
 if not exist "..\assets\icons\icon.ico" (
     echo WARNING: icon.ico not found. Please convert icon.svg to icon.ico first.
-    echo You can use online converters or tools like Inkscape to convert SVG to ICO.
     pause
     exit /b 1
 )
@@ -19,7 +18,7 @@ if exist "build" rmdir /s /q "build"
 
 REM Build with PyInstaller
 echo Building executable...
-pyinstaller AudioInputStreamer.spec
+python -m PyInstaller AudioInputStreamer.spec
 
 if errorlevel 1 (
     echo Build failed!
