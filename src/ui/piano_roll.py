@@ -147,7 +147,8 @@ class PianoRollWidget(QWidget):
         self.pause_start_time = 0.0  # When the pause started
         self.total_pause_duration = 0.0  # Total time spent paused
         
-        # Colors for different velocities (brighter colors for better visibility)
+        # Colors for different velocities (brighter colors for better visibility) - DEPRECATED
+        # Keeping for backward compatibility during transition
         self.velocity_colors = [
             QColor(100, 170, 255),  # Light blue for soft notes
             QColor(80, 140, 255),   # Royal blue
@@ -160,6 +161,18 @@ class PianoRollWidget(QWidget):
             QColor(255, 100, 0),    # Red orange for loud notes
             QColor(255, 50, 50),    # Red for very loud notes
         ]
+        
+        # Static gradient configuration for note coloring
+        # Notes will be colored based on their Y position, not velocity
+        self.gradient_config = {
+            'enabled': True,  # Enable gradient coloring
+            'colors': [
+                (255, 100, 150),  # Pink (bottom of widget)
+                (255, 150, 0),    # Orange (middle)
+                (255, 50, 50),    # Red (top of widget)
+            ],
+            'positions': [0.0, 0.5, 1.0],  # Relative positions (0=bottom, 1=top)
+        }
         
         # Setup timer for animation
         self.timer = QTimer()
@@ -198,10 +211,64 @@ class PianoRollWidget(QWidget):
         return note_in_octave in [1, 3, 6, 8, 10]  # C#, D#, F#, G#, A#
     
     def velocity_to_color(self, velocity: int) -> QColor:
-        """Convert MIDI velocity to color"""
+        """Convert MIDI velocity to color - DEPRECATED, kept for compatibility"""
         # Map velocity (0-127) to color index
         color_index = min(9, velocity // 13)
         return self.velocity_colors[color_index]
+    
+    def position_to_gradient_color(self, y_position: float, widget_height: int) -> QColor:
+        """Calculate color based on Y position using the static gradient
+        
+        Args:
+            y_position: Y coordinate in the widget (0 = top, widget_height = bottom)
+            widget_height: Height of the widget
+            
+        Returns:
+            QColor based on the gradient configuration
+        """
+        if not self.gradient_config['enabled']:
+            # Fallback to a default color if gradient is disabled
+            return QColor(100, 170, 255)
+        
+        # Normalize position to 0.0 (bottom) to 1.0 (top)
+        # Since we want the gradient to go from bottom to top
+        normalized_pos = 1.0 - (y_position / widget_height)
+        normalized_pos = max(0.0, min(1.0, normalized_pos))
+        
+        colors = self.gradient_config['colors']
+        positions = self.gradient_config['positions']
+        
+        # Find the two colors to interpolate between
+        if normalized_pos <= positions[0]:
+            # Before first position, use first color
+            r, g, b = colors[0]
+            return QColor(r, g, b)
+        elif normalized_pos >= positions[-1]:
+            # After last position, use last color
+            r, g, b = colors[-1]
+            return QColor(r, g, b)
+        else:
+            # Find the segment to interpolate in
+            for i in range(len(positions) - 1):
+                if positions[i] <= normalized_pos <= positions[i + 1]:
+                    # Calculate interpolation factor
+                    segment_start = positions[i]
+                    segment_end = positions[i + 1]
+                    segment_length = segment_end - segment_start
+                    factor = (normalized_pos - segment_start) / segment_length
+                    
+                    # Interpolate between the two colors
+                    r1, g1, b1 = colors[i]
+                    r2, g2, b2 = colors[i + 1]
+                    
+                    r = int(r1 + (r2 - r1) * factor)
+                    g = int(g1 + (g2 - g1) * factor)
+                    b = int(b1 + (b2 - b1) * factor)
+                    
+                    return QColor(r, g, b)
+        
+        # Fallback (shouldn't reach here)
+        return QColor(100, 170, 255)
     
     def add_note_on(self, note: int, velocity: int):
         """Handle note on event"""
@@ -398,8 +465,11 @@ class PianoRollWidget(QWidget):
         if rect_height <= 0:
             return
         
-        # Get color based on velocity (make it brighter for active notes)
-        base_color = self.velocity_to_color(velocity)
+        # Get color based on gradient position (use the middle of the note for color calculation)
+        color_sample_y = (y_top + y_bottom) / 2
+        base_color = self.position_to_gradient_color(color_sample_y, widget_height)
+        
+        # Make it brighter for active notes
         color = QColor(
             min(255, base_color.red() + 50),    # Extra bright for active notes
             min(255, base_color.green() + 50),
@@ -418,11 +488,25 @@ class PianoRollWidget(QWidget):
         # Draw with a white border for active notes
         painter.setPen(QPen(Qt.GlobalColor.white, 1))  # White border, 1 pixel width
         
-        # Draw the note rectangle with a gradient fill
-        gradient = QLinearGradient(rect.topLeft(), rect.bottomRight())
-        gradient.setColorAt(0, color.lighter(130))
-        gradient.setColorAt(0.5, color)
-        gradient.setColorAt(1, color.darker(120))
+        # Create a vertical gradient fill that shows the actual gradient across the note height
+        gradient = QLinearGradient(rect.left(), rect.top(), rect.left(), rect.bottom())
+        
+        # Sample colors at multiple points along the note height
+        num_samples = max(3, int(rect_height / 20))  # More samples for taller notes
+        for i in range(num_samples):
+            position = i / (num_samples - 1) if num_samples > 1 else 0
+            sample_y = y_top + (y_bottom - y_top) * position
+            sample_color = self.position_to_gradient_color(sample_y, widget_height)
+            
+            # Make it brighter for active notes
+            enhanced_color = QColor(
+                min(255, sample_color.red() + 50),
+                min(255, sample_color.green() + 50),
+                min(255, sample_color.blue() + 50),
+                220
+            )
+            gradient.setColorAt(position, enhanced_color)
+        
         painter.setBrush(QBrush(gradient))
         
         # Draw with rounded corners
@@ -473,8 +557,11 @@ class PianoRollWidget(QWidget):
         if rect_height <= 0:
             return
         
-        # Get color based on velocity (normal brightness for completed notes)
-        base_color = self.velocity_to_color(velocity)
+        # Get color based on gradient position (use the middle of the note for color calculation)
+        color_sample_y = (y_top_draw + y_bottom_draw) / 2
+        base_color = self.position_to_gradient_color(color_sample_y, widget_height)
+        
+        # Normal brightness for completed notes
         color = QColor(
             min(255, base_color.red() + 30),
             min(255, base_color.green() + 30),
@@ -493,11 +580,25 @@ class PianoRollWidget(QWidget):
         # No border for completed notes - just the solid color
         painter.setPen(Qt.PenStyle.NoPen)
         
-        # Draw the note rectangle with a gradient fill
-        gradient = QLinearGradient(rect.topLeft(), rect.bottomRight())
-        gradient.setColorAt(0, color.lighter(120))
-        gradient.setColorAt(0.5, color)
-        gradient.setColorAt(1, color.darker(110))
+        # Create a vertical gradient fill that shows the actual gradient across the note height
+        gradient = QLinearGradient(rect.left(), rect.top(), rect.left(), rect.bottom())
+        
+        # Sample colors at multiple points along the note height
+        num_samples = max(3, int(rect_height / 20))  # More samples for taller notes
+        for i in range(num_samples):
+            position = i / (num_samples - 1) if num_samples > 1 else 0
+            sample_y = y_top_draw + (y_bottom_draw - y_top_draw) * position
+            sample_color = self.position_to_gradient_color(sample_y, widget_height)
+            
+            # Normal brightness for completed notes
+            enhanced_color = QColor(
+                min(255, sample_color.red() + 30),
+                min(255, sample_color.green() + 30),
+                min(255, sample_color.blue() + 30),
+                240
+            )
+            gradient.setColorAt(position, enhanced_color)
+        
         painter.setBrush(QBrush(gradient))
         
         # Draw with rounded corners for better appearance
@@ -571,8 +672,8 @@ class PianoRollWidget(QWidget):
                     key_width = self.key_width(widget_width)
                     note_x_start = self.key_index_to_x(key_index, widget_width)
                     
-                    # Get base color for particles - make it brighter and more vibrant
-                    base_color = self.velocity_to_color(velocity)
+                    # Get base color for particles from gradient (use bottom of widget for particles)
+                    base_color = self.position_to_gradient_color(widget_height, widget_height)
                     
                     # Spawn multiple particles per note using configuration
                     base_particle_count = max(self.particle_config['particles_per_note_base'], 
@@ -816,3 +917,43 @@ class PianoRollWidget(QWidget):
     def get_particle_config(self):
         """Get current particle configuration"""
         return self.particle_config.copy()
+    
+    def update_gradient_config(self, **kwargs):
+        """Update gradient configuration parameters
+        
+        Available parameters:
+        - enabled: bool - enable/disable gradient coloring
+        - colors: list of (r, g, b) tuples - gradient colors
+        - positions: list of floats - relative positions (0.0-1.0)
+        """
+        for key, value in kwargs.items():
+            if key in self.gradient_config:
+                self.gradient_config[key] = value
+            else:
+                print(f"Warning: Unknown gradient config parameter: {key}")
+                print(f"Available parameters: {list(self.gradient_config.keys())}")
+    
+    def get_gradient_config(self):
+        """Get current gradient configuration"""
+        return self.gradient_config.copy()
+    
+    def set_gradient_colors(self, colors, positions=None):
+        """Set gradient colors and optionally positions
+        
+        Args:
+            colors: List of (r, g, b) tuples
+            positions: Optional list of relative positions (0.0-1.0). If None, will be evenly distributed.
+        """
+        if not colors:
+            return
+        
+        self.gradient_config['colors'] = colors
+        
+        if positions is None:
+            # Evenly distribute positions
+            if len(colors) == 1:
+                positions = [0.5]
+            else:
+                positions = [i / (len(colors) - 1) for i in range(len(colors))]
+        
+        self.gradient_config['positions'] = positions

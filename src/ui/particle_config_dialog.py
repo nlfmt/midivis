@@ -370,6 +370,105 @@ class ParticleConfigDialog(QDialog):
         
         layout.addWidget(particles_group)
         
+        # Gradient Configuration Group
+        gradient_group = QGroupBox("Note Color Gradient")
+        gradient_layout = QGridLayout(gradient_group)
+        gradient_layout.setContentsMargins(8, 12, 8, 8)
+        gradient_layout.setSpacing(4)
+        gradient_layout.setVerticalSpacing(6)
+        
+        row = 0
+        
+        # Gradient enable
+        self.gradient_enabled_cb = QCheckBox("Enable Gradient Coloring")
+        self.gradient_enabled_cb.stateChanged.connect(self.on_gradient_enabled_changed)
+        gradient_layout.addWidget(self.gradient_enabled_cb, row, 0, 1, 3)
+        row += 1
+        
+        # Color preset buttons
+        gradient_layout.addWidget(QLabel("Presets:"), row, 0)
+        preset_layout = QHBoxLayout()
+        
+        self.preset_fire_button = QPushButton("Fire")
+        self.preset_fire_button.setFixedHeight(25)
+        self.preset_fire_button.clicked.connect(lambda: self.apply_gradient_preset("fire"))
+        preset_layout.addWidget(self.preset_fire_button)
+        
+        self.preset_ocean_button = QPushButton("Ocean")
+        self.preset_ocean_button.setFixedHeight(25)
+        self.preset_ocean_button.clicked.connect(lambda: self.apply_gradient_preset("ocean"))
+        preset_layout.addWidget(self.preset_ocean_button)
+        
+        self.preset_sunset_button = QPushButton("Sunset")
+        self.preset_sunset_button.setFixedHeight(25)
+        self.preset_sunset_button.clicked.connect(lambda: self.apply_gradient_preset("sunset"))
+        preset_layout.addWidget(self.preset_sunset_button)
+        
+        self.preset_rainbow_button = QPushButton("Rainbow")
+        self.preset_rainbow_button.setFixedHeight(25)
+        self.preset_rainbow_button.clicked.connect(lambda: self.apply_gradient_preset("rainbow"))
+        preset_layout.addWidget(self.preset_rainbow_button)
+        
+        gradient_layout.addLayout(preset_layout, row, 1, 1, 2)
+        row += 1
+        
+        # Individual color controls (simplified - showing 3 main colors)
+        gradient_layout.addWidget(QLabel("Bottom Color (R,G,B):"), row, 0)
+        self.bottom_color_r = QSpinBox()
+        self.bottom_color_r.setRange(0, 255)
+        self.bottom_color_r.valueChanged.connect(self.on_gradient_color_changed)
+        self.bottom_color_g = QSpinBox()
+        self.bottom_color_g.setRange(0, 255)
+        self.bottom_color_g.valueChanged.connect(self.on_gradient_color_changed)
+        self.bottom_color_b = QSpinBox()
+        self.bottom_color_b.setRange(0, 255)
+        self.bottom_color_b.valueChanged.connect(self.on_gradient_color_changed)
+        
+        bottom_color_layout = QHBoxLayout()
+        bottom_color_layout.addWidget(self.bottom_color_r)
+        bottom_color_layout.addWidget(self.bottom_color_g)
+        bottom_color_layout.addWidget(self.bottom_color_b)
+        gradient_layout.addLayout(bottom_color_layout, row, 1, 1, 2)
+        row += 1
+        
+        gradient_layout.addWidget(QLabel("Middle Color (R,G,B):"), row, 0)
+        self.middle_color_r = QSpinBox()
+        self.middle_color_r.setRange(0, 255)
+        self.middle_color_r.valueChanged.connect(self.on_gradient_color_changed)
+        self.middle_color_g = QSpinBox()
+        self.middle_color_g.setRange(0, 255)
+        self.middle_color_g.valueChanged.connect(self.on_gradient_color_changed)
+        self.middle_color_b = QSpinBox()
+        self.middle_color_b.setRange(0, 255)
+        self.middle_color_b.valueChanged.connect(self.on_gradient_color_changed)
+        
+        middle_color_layout = QHBoxLayout()
+        middle_color_layout.addWidget(self.middle_color_r)
+        middle_color_layout.addWidget(self.middle_color_g)
+        middle_color_layout.addWidget(self.middle_color_b)
+        gradient_layout.addLayout(middle_color_layout, row, 1, 1, 2)
+        row += 1
+        
+        gradient_layout.addWidget(QLabel("Top Color (R,G,B):"), row, 0)
+        self.top_color_r = QSpinBox()
+        self.top_color_r.setRange(0, 255)
+        self.top_color_r.valueChanged.connect(self.on_gradient_color_changed)
+        self.top_color_g = QSpinBox()
+        self.top_color_g.setRange(0, 255)
+        self.top_color_g.valueChanged.connect(self.on_gradient_color_changed)
+        self.top_color_b = QSpinBox()
+        self.top_color_b.setRange(0, 255)
+        self.top_color_b.valueChanged.connect(self.on_gradient_color_changed)
+        
+        top_color_layout = QHBoxLayout()
+        top_color_layout.addWidget(self.top_color_r)
+        top_color_layout.addWidget(self.top_color_g)
+        top_color_layout.addWidget(self.top_color_b)
+        gradient_layout.addLayout(top_color_layout, row, 1, 1, 2)
+        row += 1
+        
+        layout.addWidget(gradient_group)
+        
         # Spark Particles Group
         spark_group = QGroupBox("Spark Particles")
         spark_layout = QGridLayout(spark_group)
@@ -521,6 +620,63 @@ class ParticleConfigDialog(QDialog):
             # Clear existing spark particles
             self.piano_roll.spark_particles.clear()
     
+    def on_gradient_enabled_changed(self, state):
+        """Handle enable/disable of gradient coloring"""
+        enabled = state == Qt.CheckState.Checked.value
+        self.piano_roll.update_gradient_config(enabled=enabled)
+    
+    def on_gradient_color_changed(self):
+        """Handle gradient color changes"""
+        # Get current color values
+        bottom_color = (self.bottom_color_r.value(), self.bottom_color_g.value(), self.bottom_color_b.value())
+        middle_color = (self.middle_color_r.value(), self.middle_color_g.value(), self.middle_color_b.value())
+        top_color = (self.top_color_r.value(), self.top_color_g.value(), self.top_color_b.value())
+        
+        # Update the gradient configuration
+        colors = [bottom_color, middle_color, top_color]
+        positions = [0.0, 0.5, 1.0]
+        self.piano_roll.set_gradient_colors(colors, positions)
+    
+    def apply_gradient_preset(self, preset_name):
+        """Apply a gradient color preset"""
+        presets = {
+            "fire": {
+                "colors": [(255, 100, 150), (255, 150, 0), (255, 50, 50)],  # Pink to Orange to Red
+                "positions": [0.0, 0.5, 1.0]
+            },
+            "ocean": {
+                "colors": [(100, 200, 255), (0, 150, 255), (0, 100, 200)],  # Light Blue to Blue to Dark Blue
+                "positions": [0.0, 0.5, 1.0]
+            },
+            "sunset": {
+                "colors": [(255, 200, 100), (255, 120, 50), (150, 50, 100)],  # Yellow to Orange to Purple
+                "positions": [0.0, 0.5, 1.0]
+            },
+            "rainbow": {
+                "colors": [(255, 0, 0), (255, 165, 0), (0, 255, 0), (0, 0, 255)],  # Red to Orange to Green to Blue
+                "positions": [0.0, 0.33, 0.66, 1.0]
+            }
+        }
+        
+        if preset_name in presets:
+            preset = presets[preset_name]
+            self.piano_roll.set_gradient_colors(preset["colors"], preset["positions"])
+            # Update UI to reflect the preset (only update the 3-color simplified view)
+            if len(preset["colors"]) >= 3:
+                # Bottom color
+                self.bottom_color_r.setValue(preset["colors"][0][0])
+                self.bottom_color_g.setValue(preset["colors"][0][1])
+                self.bottom_color_b.setValue(preset["colors"][0][2])
+                # Middle color (use middle of available colors)
+                mid_idx = len(preset["colors"]) // 2
+                self.middle_color_r.setValue(preset["colors"][mid_idx][0])
+                self.middle_color_g.setValue(preset["colors"][mid_idx][1])
+                self.middle_color_b.setValue(preset["colors"][mid_idx][2])
+                # Top color
+                self.top_color_r.setValue(preset["colors"][-1][0])
+                self.top_color_g.setValue(preset["colors"][-1][1])
+                self.top_color_b.setValue(preset["colors"][-1][2])
+    
     def load_current_values(self):
         """Load current particle configuration values into the UI"""
         config = self.piano_roll.get_particle_config()
@@ -591,6 +747,26 @@ class ParticleConfigDialog(QDialog):
         
         # Enable particles checkbox (always enabled for now)
         self.particles_enabled_cb.setChecked(True)
+        
+        # Load gradient configuration values
+        gradient_config = self.piano_roll.get_gradient_config()
+        self.gradient_enabled_cb.setChecked(gradient_config['enabled'])
+        
+        # Load current gradient colors (simplified 3-color view)
+        colors = gradient_config['colors']
+        if len(colors) >= 3:
+            # Bottom color
+            self.bottom_color_r.setValue(colors[0][0])
+            self.bottom_color_g.setValue(colors[0][1])
+            self.bottom_color_b.setValue(colors[0][2])
+            # Middle color
+            self.middle_color_r.setValue(colors[1][0])
+            self.middle_color_g.setValue(colors[1][1])
+            self.middle_color_b.setValue(colors[1][2])
+            # Top color
+            self.top_color_r.setValue(colors[2][0])
+            self.top_color_g.setValue(colors[2][1])
+            self.top_color_b.setValue(colors[2][2])
     
     def reset_to_defaults(self):
         """Reset all particle parameters to their default values"""
