@@ -1,5 +1,5 @@
 from typing import List, Optional, Callable
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Signal, QTimer, QMetaObject, Qt
 import time
 
 # Defer heavy imports until needed
@@ -36,11 +36,20 @@ class MIDIManager(QObject):
     note_off = Signal(int)       # note_number
     error_occurred = Signal(str) # error_message
     
+    # Internal signals for delayed processing (connect to main thread)
+    _delayed_note_on_signal = Signal(int, int, int)   # note, velocity, delay_ms
+    _delayed_note_off_signal = Signal(int, int)       # note, delay_ms
+    
     def __init__(self):
         super().__init__()
         self.midi_in = None
         self.current_device: Optional[MIDIDevice] = None
         self.available_devices: List[MIDIDevice] = []
+        self.delay_ms = 0  # MIDI delay compensation in milliseconds
+        
+        # Connect internal signals to delayed handlers
+        self._delayed_note_on_signal.connect(self._handle_delayed_note_on)
+        self._delayed_note_off_signal.connect(self._handle_delayed_note_off)
         
     def refresh_devices(self) -> List[MIDIDevice]:
         """Refresh and return list of available MIDI input devices"""
@@ -64,6 +73,10 @@ class MIDIManager(QObject):
             self.error_occurred.emit(f"Failed to query MIDI devices: {str(e)}")
         
         return self.available_devices
+    
+    def set_delay(self, delay_ms: int):
+        """Set MIDI delay compensation in milliseconds"""
+        self.delay_ms = max(0, delay_ms)  # Ensure non-negative delay
     
     def get_device_by_name(self, name: str) -> Optional[MIDIDevice]:
         """Find MIDI device by name"""
@@ -121,15 +134,35 @@ class MIDIManager(QObject):
                 velocity = message[2] if len(message) > 2 else 64
                 
                 if velocity > 0:
-                    self.note_on.emit(note, velocity)
+                    if self.delay_ms > 0:
+                        # Schedule delayed emission using internal signal
+                        self._delayed_note_on_signal.emit(note, velocity, self.delay_ms)
+                    else:
+                        # Emit immediately (signals are thread-safe in Qt)
+                        self.note_on.emit(note, velocity)
                 else:
                     # Note on with velocity 0 is equivalent to note off
-                    self.note_off.emit(note)
+                    if self.delay_ms > 0:
+                        self._delayed_note_off_signal.emit(note, self.delay_ms)
+                    else:
+                        self.note_off.emit(note)
             
             # Note Off (0x80-0x8F)
             elif status >= 0x80 and status <= 0x8F:
                 note = message[1]
-                self.note_off.emit(note)
+                if self.delay_ms > 0:
+                    self._delayed_note_off_signal.emit(note, self.delay_ms)
+                else:
+                    self.note_off.emit(note)
+    
+    # Helper methods for thread-safe MIDI event handling
+    def _handle_delayed_note_on(self, note: int, velocity: int, delay_ms: int):
+        """Handle delayed note_on signal using QTimer"""
+        QTimer.singleShot(delay_ms, lambda: self.note_on.emit(note, velocity))
+    
+    def _handle_delayed_note_off(self, note: int, delay_ms: int):
+        """Handle delayed note_off signal using QTimer"""
+        QTimer.singleShot(delay_ms, lambda: self.note_off.emit(note))
     
     def is_listening(self) -> bool:
         """Check if currently listening to MIDI"""

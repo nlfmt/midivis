@@ -153,3 +153,19 @@ class SettingsManager(QObject):
     def set_show_piano_roll(self, show_piano_roll: bool):
         """Set whether to show piano roll view"""
         self.set_setting('show_piano_roll', show_piano_roll)
+    
+    def get_scroll_speed(self) -> int:
+        """Get piano roll scroll speed"""
+        return self.get_setting('scroll_speed', 100)
+    
+    def set_scroll_speed(self, speed: int):
+        """Set piano roll scroll speed"""
+        self.set_setting('scroll_speed', speed)
+    
+    def get_midi_delay(self) -> int:
+        """Get MIDI delay compensation in milliseconds"""
+        return self.get_setting('midi_delay', 0)
+    
+    def set_midi_delay(self, delay_ms: int):
+        """Set MIDI delay compensation in milliseconds"""
+        self.set_setting('midi_delay', delay_ms)

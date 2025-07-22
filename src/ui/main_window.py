@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-                             QLabel, QComboBox, QPushButton, QFrame, QMessageBox, QSizePolicy, QApplication)
+                             QLabel, QComboBox, QPushButton, QFrame, QMessageBox, QSizePolicy, QApplication, QSpinBox)
 from PySide6.QtCore import Qt, QTimer, QThread, Signal
 from PySide6.QtGui import QIcon, QFont
 
@@ -57,6 +57,10 @@ class MainWindow(QMainWindow):
         self.input_device_combo = None
         self.output_device_combo = None
         self.midi_device_combo = None
+        self.scroll_speed_input = None
+        self.midi_delay_input = None
+        self.play_pause_button = None
+        self.clear_button = None
         self.mute_button = None
         self.view_toggle_button = None
         self.spectrum_analyzer = None
@@ -144,9 +148,6 @@ class MainWindow(QMainWindow):
         
         # Update visualization widget based on current setting
         self.update_visualization_widget()
-        
-        # Add test functionality - double-click piano roll button to test
-        self.view_toggle_button.mouseDoubleClickEvent = self.test_piano_roll_display
     
     def on_device_load_error(self, error_message):
         """Handle error loading devices"""
@@ -280,6 +281,102 @@ class MainWindow(QMainWindow):
         self.midi_device_combo.setEnabled(False)  # Disabled until devices are loaded
         midi_row.addWidget(self.midi_device_combo, 1)
         
+        # Scroll speed control
+        self.scroll_speed_input = QComboBox()
+        self.scroll_speed_input.addItems(["Slower", "Slow", "Normal", "Fast", "Faster"])
+        self.scroll_speed_input.setCurrentText("Normal")  # Default to normal speed
+        self.scroll_speed_input.setMinimumHeight(30)
+        self.scroll_speed_input.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.scroll_speed_input.setFixedWidth(80)
+        self.scroll_speed_input.setToolTip("Piano roll scroll speed")
+        midi_row.addWidget(self.scroll_speed_input)
+        
+        # MIDI delay control
+        self.midi_delay_input = QSpinBox()
+        self.midi_delay_input.setMinimum(0)
+        self.midi_delay_input.setMaximum(1000)
+        self.midi_delay_input.setValue(0)
+        self.midi_delay_input.setSuffix(" ms")
+        self.midi_delay_input.setMinimumHeight(30)
+        self.midi_delay_input.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.midi_delay_input.setFixedWidth(80)
+        self.midi_delay_input.setToolTip("MIDI delay compensation (milliseconds)")
+        # Style to match QComboBox from theme
+        self.midi_delay_input.setStyleSheet("""
+            QSpinBox {
+                background-color: #404040;
+                border: 1px solid #555555;
+                border-radius: 6px;
+                padding: 8px 12px;
+                color: #ffffff;
+                font-size: 9pt;
+                min-height: 18px;
+                max-height: 30px;
+                border-style: solid;
+                outline: none;
+            }
+            QSpinBox:hover {
+                border-color: #0078d4;
+                background-color: #454545;
+            }
+            QSpinBox:focus {
+                border-color: #0078d4;
+                background-color: #454545;
+                outline: none;
+            }
+            QSpinBox::up-button, QSpinBox::down-button {
+                width: 0px;
+                border: none;
+                background: transparent;
+            }
+        """)
+        midi_row.addWidget(self.midi_delay_input)
+        
+        # Piano roll control buttons
+        self.play_pause_button = QPushButton("Pause")
+        self.play_pause_button.setFixedSize(60, 30)
+        self.play_pause_button.setToolTip("Play/Pause piano roll")
+        self.play_pause_button.setStyleSheet("""
+            QPushButton {
+                background-color: #2d2d2d;
+                border: 1px solid #555;
+                border-radius: 4px;
+                color: #ffffff;
+                font-size: 11px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #353535;
+                border-color: #777;
+            }
+            QPushButton:pressed {
+                background-color: #1a1a1a;
+            }
+        """)
+        midi_row.addWidget(self.play_pause_button)
+        
+        self.clear_button = QPushButton("Clear")
+        self.clear_button.setFixedSize(50, 30)
+        self.clear_button.setToolTip("Clear all notes")
+        self.clear_button.setStyleSheet("""
+            QPushButton {
+                background-color: #2d2d2d;
+                border: 1px solid #555;
+                border-radius: 4px;
+                color: #ffffff;
+                font-size: 11px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #4a2d2d;
+                border-color: #777;
+            }
+            QPushButton:pressed {
+                background-color: #1a1a1a;
+            }
+        """)
+        midi_row.addWidget(self.clear_button)
+        
         # View toggle button
         self.view_toggle_button = QPushButton("Piano Roll")
         self.view_toggle_button.setFixedSize(80, 30)
@@ -321,8 +418,12 @@ class MainWindow(QMainWindow):
         self.input_device_combo.currentTextChanged.connect(self.on_input_device_changed)
         self.output_device_combo.currentTextChanged.connect(self.on_output_device_changed)
         self.midi_device_combo.currentTextChanged.connect(self.on_midi_device_changed)
+        self.scroll_speed_input.currentTextChanged.connect(self.on_scroll_speed_changed)
+        self.midi_delay_input.valueChanged.connect(self.on_midi_delay_changed)
         self.mute_button.clicked.connect(self.toggle_mute)
         self.view_toggle_button.clicked.connect(self.toggle_visualization)
+        self.play_pause_button.clicked.connect(self.toggle_piano_roll_playback)
+        self.clear_button.clicked.connect(self.clear_piano_roll)
     
     def on_input_device_changed(self, display_name: str):
         """Handle input device selection change"""
@@ -383,6 +484,52 @@ class MainWindow(QMainWindow):
             if display_name == "No MIDI":
                 self.settings_manager.set_last_midi_device("")
                 self.settings_manager.save_settings()
+    
+    def on_scroll_speed_changed(self, speed_text: str):
+        """Handle scroll speed change"""
+        # Convert text selection to speed value
+        speed_map = {
+            "Slower": 50,
+            "Slow": 75,
+            "Normal": 100,
+            "Fast": 200,
+            "Faster": 400
+        }
+        
+        speed = speed_map.get(speed_text, 100)  # Default to 100 if not found
+        
+        if self.piano_roll:
+            self.piano_roll.set_scroll_speed(float(speed))
+        
+        # Save the scroll speed setting
+        self.settings_manager.set_scroll_speed(speed)
+        self.settings_manager.save_settings()
+    
+    def on_midi_delay_changed(self, delay_ms: int):
+        """Handle MIDI delay change"""
+        if self.midi_manager:
+            self.midi_manager.set_delay(delay_ms)
+        
+        # Save the MIDI delay setting
+        self.settings_manager.set_midi_delay(delay_ms)
+        self.settings_manager.save_settings()
+    
+    def toggle_piano_roll_playback(self):
+        """Toggle piano roll play/pause state"""
+        if self.piano_roll:
+            self.piano_roll.toggle_pause()
+            # Update button text based on current state
+            if self.piano_roll.is_playing():
+                self.play_pause_button.setText("Pause")
+                self.play_pause_button.setToolTip("Pause piano roll")
+            else:
+                self.play_pause_button.setText("Play")
+                self.play_pause_button.setToolTip("Play piano roll")
+    
+    def clear_piano_roll(self):
+        """Clear all notes from the piano roll"""
+        if self.piano_roll:
+            self.piano_roll.clear_notes()
     
     def try_start_streaming(self):
         """Try to start streaming only if both input and output devices are properly selected"""
@@ -527,6 +674,22 @@ class MainWindow(QMainWindow):
         # Load view preference
         self.show_piano_roll = self.settings_manager.get_show_piano_roll()
         
+        # Load scroll speed preference
+        saved_speed = self.settings_manager.get_scroll_speed()
+        speed_text_map = {
+            50: "Slower",
+            75: "Slow", 
+            100: "Normal",
+            200: "Fast",
+            400: "Faster"
+        }
+        speed_text = speed_text_map.get(saved_speed, "Normal")
+        self.scroll_speed_input.setCurrentText(speed_text)
+        
+        # Load MIDI delay preference
+        saved_delay = self.settings_manager.get_midi_delay()
+        self.midi_delay_input.setValue(saved_delay)
+        
         # Clear flag and try to start streaming now that both devices are loaded
         self.loading_device_settings = False
         self.try_start_streaming()
@@ -596,6 +759,14 @@ class MainWindow(QMainWindow):
                 
                 # Update button text
                 self.view_toggle_button.setText("Spectrum")
+                
+                # Update play/pause button state based on piano roll state
+                if self.piano_roll.is_playing():
+                    self.play_pause_button.setText("Pause")
+                    self.play_pause_button.setToolTip("Pause piano roll")
+                else:
+                    self.play_pause_button.setText("Play")
+                    self.play_pause_button.setToolTip("Play piano roll")
         
         # Handle switch to spectrum analyzer
         else:
@@ -624,13 +795,3 @@ class MainWindow(QMainWindow):
         # Save preference
         self.settings_manager.set_show_piano_roll(self.show_piano_roll)
         self.settings_manager.save_settings()
-    
-    def test_piano_roll_display(self, event=None):
-        """Test method to toggle to piano roll and add sample notes"""
-        # Force switch to piano roll
-        self.show_piano_roll = True
-        self.update_visualization_widget()
-        
-        # Add test notes if piano roll is available
-        if self.piano_roll:
-            self.piano_roll.test_piano_roll()
