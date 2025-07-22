@@ -21,7 +21,7 @@ class ParticleConfigDialog(QDialog):
         # Set custom stylesheet for the dialog
         self.setStyleSheet("""
             QDialog {
-                background-color: #2b2b2b;
+                background-color: #2b2b2b;  /* Dark gray to match main UI and device dialog */
                 color: #ffffff;
             }
             
@@ -473,10 +473,6 @@ class ParticleConfigDialog(QDialog):
         button_layout.addWidget(self.reset_button)
         
         button_layout.addStretch()
-        
-        self.close_button = QPushButton("Close")
-        self.close_button.clicked.connect(self.close)
-        button_layout.addWidget(self.close_button)
         
         main_layout.addLayout(button_layout)
     

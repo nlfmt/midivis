@@ -53,24 +53,27 @@ class MainWindow(QMainWindow):
         self.midi_manager = MIDIManager()
         self.settings_manager = SettingsManager()
         
+        # Current device selections (the source of truth)
+        self.current_input_device = None    # AudioDevice object
+        self.current_output_device = None   # AudioDevice object or "Default Output"
+        self.current_midi_device = None     # MIDIDevice object or None
+        
         # UI components
-        self.input_device_combo = None
-        self.output_device_combo = None
-        self.midi_device_combo = None
         self.scroll_speed_input = None
         self.midi_delay_input = None
         self.play_pause_button = None
         self.clear_button = None
         self.particles_button = None
+        self.devices_button = None  # New devices button
         self.mute_button = None
         self.view_toggle_button = None
         self.spectrum_analyzer = None
         self.piano_roll = None
         self.device_worker = None
+        self.device_config_dialog = None  # Device configuration dialog
         
         # Loading state
         self.devices_loaded = False
-        self.loading_device_settings = False  # Flag to prevent premature streaming during device loading
         self.input_device_map = {}  # Maps display names to device objects
         self.output_device_map = {}  # Maps display names to device objects
         self.midi_device_map = {}   # Maps display names to MIDI device objects
@@ -97,13 +100,94 @@ class MainWindow(QMainWindow):
     def on_devices_loaded(self, input_devices, output_devices, midi_devices):
         """Handle devices loaded from background thread"""
         self.devices_loaded = True
-        self.populate_device_combos(input_devices, output_devices, midi_devices)
+        self.populate_device_maps(input_devices, output_devices, midi_devices)
         
-        # Load settings now that devices are available
-        self.load_device_settings()
+        # Update device config dialog if it exists
+        if self.device_config_dialog:
+            self.device_config_dialog.update_device_maps(
+                self.input_device_map, 
+                self.output_device_map, 
+                self.midi_device_map
+            )
+        
+        # Load device settings and determine which devices to use
+        self.determine_devices_from_settings()
+        
+        # Start MIDI listening and audio streaming
+        self.start_devices()
         
         # Initialize spectrum analyzer and piano roll now that we're ready
         self.initialize_visualization_widgets()
+    
+    def populate_device_maps(self, input_devices, output_devices, midi_devices):
+        """Populate device mappings from loaded devices"""
+        # Clear existing mappings
+        self.input_device_map.clear()
+        self.output_device_map.clear()
+        self.midi_device_map.clear()
+        
+        # Populate input devices
+        for device in input_devices:
+            display_name = f"{device.name} ({device.hostapi_name})"
+            self.input_device_map[display_name] = device
+        
+        # Populate output devices - always include "Default Output"
+        self.output_device_map["Default Output"] = "Default Output"
+        for device in output_devices:
+            display_name = f"{device.name} ({device.hostapi_name})"
+            self.output_device_map[display_name] = device
+        
+        # Populate MIDI devices - always include "No MIDI"
+        self.midi_device_map["No MIDI"] = None
+        for device in midi_devices:
+            self.midi_device_map[device.name] = device
+    
+    def determine_devices_from_settings(self):
+        """Determine which devices to use based on settings or fallback to defaults"""
+        # Determine input device
+        last_input_display_name = self.settings_manager.get_last_input_device()
+        
+        self.current_input_device = None
+        if last_input_display_name:
+            # Try to find the device by display name first
+            if last_input_display_name in self.input_device_map:
+                self.current_input_device = self.input_device_map[last_input_display_name]
+            else:
+                # Try to find by partial name match (in case API suffix changed)
+                for display_name, device in self.input_device_map.items():
+                    if device and last_input_display_name in display_name:
+                        self.current_input_device = device
+                        break
+        
+        # Fallback to first available input device
+        if not self.current_input_device and self.input_device_map:
+            first_device_name = next(iter(self.input_device_map.keys()))
+            self.current_input_device = self.input_device_map[first_device_name]
+        
+        # Determine output device
+        last_output_display_name = self.settings_manager.get_last_output_device()
+        
+        self.current_output_device = "Default Output"  # Default fallback
+        if last_output_display_name and last_output_display_name in self.output_device_map:
+            self.current_output_device = self.output_device_map[last_output_display_name]
+        
+        # Determine MIDI device
+        last_midi_display_name = self.settings_manager.get_last_midi_device()
+        
+        self.current_midi_device = None  # Default fallback (No MIDI)
+        if last_midi_display_name and last_midi_display_name in self.midi_device_map:
+            self.current_midi_device = self.midi_device_map[last_midi_display_name]
+    
+    def start_devices(self):
+        """Start MIDI listening and audio streaming with determined devices"""
+        # Start MIDI listening if device is selected
+        if self.current_midi_device:
+            success = self.midi_manager.start_listening(self.current_midi_device)
+            if not success:
+                self.current_midi_device = None  # Reset on failure
+        
+        # Start audio streaming
+        self.try_start_streaming()
     
     def initialize_visualization_widgets(self):
         """Initialize the spectrum analyzer and piano roll (deferred to reduce startup time)"""
@@ -156,84 +240,14 @@ class MainWindow(QMainWindow):
     
     def on_device_load_error(self, error_message):
         """Handle error loading devices"""
-        self.input_device_combo.clear()
-        self.input_device_combo.addItem(f"Error: {error_message}")
-        self.input_device_combo.setEnabled(False)
-        
-        self.output_device_combo.clear()
-        self.output_device_combo.addItem(f"Error: {error_message}")
-        self.output_device_combo.setEnabled(False)
-        
-        self.midi_device_combo.clear()
-        self.midi_device_combo.addItem(f"Error: {error_message}")
-        self.midi_device_combo.setEnabled(False)
-        
+        print(f"Device loading failed: {error_message}")
         self.show_error(f"Failed to load devices: {error_message}")
     
-    def populate_device_combos(self, input_devices, output_devices, midi_devices):
-        """Populate the device combo boxes with loaded devices"""
-        # Clear mappings
-        self.input_device_map.clear()
-        self.output_device_map.clear()
-        self.midi_device_map.clear()
-        
-        # Populate input devices
-        self.input_device_combo.clear()
-        self.input_device_combo.setPlaceholderText("Select input device...")
-        self.input_device_combo.setEnabled(True)
-        
-        if not input_devices:
-            self.input_device_combo.addItem("No input devices found")
-            self.input_device_combo.setEnabled(False)
-        else:
-            for device in input_devices:
-                display_name = f"{device.name} ({device.hostapi_name})"
-                self.input_device_combo.addItem(display_name)
-                self.input_device_map[display_name] = device
-        
-        # Populate output devices
-        self.output_device_combo.clear()
-        self.output_device_combo.setPlaceholderText("Select output device...")
-        self.output_device_combo.setEnabled(True)
-        
-        # Add "Default Output" as first option
-        self.output_device_combo.addItem("Default Output")
-        self.output_device_map["Default Output"] = None  # None means use default
-        
-        if output_devices:
-            for device in output_devices:
-                # Show API type for better clarity
-                api_short = {
-                    'Windows WDM-KS': 'WDM-KS',
-                    'Windows WASAPI': 'WASAPI', 
-                    'Windows DirectSound': 'DirectSound'
-                }.get(device.hostapi_name, device.hostapi_name)
-                
-                display_name = f"{device.name} ({api_short})"
-                self.output_device_combo.addItem(display_name)
-                self.output_device_map[display_name] = device
-        
-        # Populate MIDI devices
-        self.midi_device_combo.clear()
-        self.midi_device_combo.setPlaceholderText("Select MIDI device...")
-        self.midi_device_combo.setEnabled(True)
-        
-        # Add "No MIDI" as first option
-        self.midi_device_combo.addItem("No MIDI")
-        self.midi_device_map["No MIDI"] = None
-        
-        if not midi_devices:
-            self.midi_device_combo.addItem("No MIDI devices found")
-        else:
-            for device in midi_devices:
-                display_name = device.name
-                self.midi_device_combo.addItem(display_name)
-                self.midi_device_map[display_name] = device
-    
+
     def setup_ui(self):
         """Setup the user interface"""
-        self.setMinimumSize(350, 280)  # Minimum size for usability (increased for MIDI row)
-        self.resize(450, 430)  # Default size (increased for MIDI row)
+        self.setMinimumSize(350, 200)  # Reduced minimum size since we removed device rows
+        self.resize(450, 350)  # Reduced default size
         
         # Central widget
         central_widget = QWidget()
@@ -244,25 +258,11 @@ class MainWindow(QMainWindow):
         layout.setSpacing(12)
         layout.setContentsMargins(12, 12, 12, 12)
         
-        # Device selection row - input and output side by side
-        device_row = QHBoxLayout()
-        device_row.setSpacing(8)
+        # Single toolbar row with all controls
+        toolbar_row = QHBoxLayout()
+        toolbar_row.setSpacing(8)
         
-        self.input_device_combo = QComboBox()
-        self.input_device_combo.setMinimumHeight(30)
-        self.input_device_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.input_device_combo.setPlaceholderText("Select input device...")
-        self.input_device_combo.addItem("Loading input devices...")
-        self.input_device_combo.setEnabled(False)  # Disabled until devices are loaded
-        device_row.addWidget(self.input_device_combo, 1)
-        
-        self.output_device_combo = QComboBox()
-        self.output_device_combo.setMinimumHeight(30)
-        self.output_device_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.output_device_combo.setPlaceholderText("Select output device...")
-        self.output_device_combo.addItem("Loading output devices...")
-        self.output_device_combo.setEnabled(False)  # Disabled until devices are loaded
-        device_row.addWidget(self.output_device_combo, 1)
+        # Left-aligned controls: streaming/mute, spectrum, particles
         
         # Combined status/mute button
         self.mute_button = QPushButton("Stopped")
@@ -270,22 +270,110 @@ class MainWindow(QMainWindow):
         self.mute_button.setFixedSize(80, 30)
         self.mute_button.setProperty("muted", False)
         self.mute_button.setToolTip("Click to mute/unmute")
-        device_row.addWidget(self.mute_button)
+        toolbar_row.addWidget(self.mute_button)
         
-        layout.addLayout(device_row)
+        # View toggle button (spectrum/piano roll)
+        self.view_toggle_button = QPushButton("Piano Roll")
+        self.view_toggle_button.setFixedSize(80, 30)
+        self.view_toggle_button.setToolTip("Switch between spectrum analyzer and piano roll")
+        toolbar_row.addWidget(self.view_toggle_button)
         
-        # MIDI and visualization control row
-        midi_row = QHBoxLayout()
-        midi_row.setSpacing(8)
+        # Particles configuration button
+        self.particles_button = QPushButton("Particles")
+        self.particles_button.setFixedSize(70, 30)
+        self.particles_button.setToolTip("Configure particle effects")
+        self.particles_button.setStyleSheet("""
+            QPushButton {
+                background-color: #2d2d2d;
+                border: 1px solid #555;
+                border-radius: 4px;
+                color: #ffffff;
+                font-size: 11px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #2d4a2d;
+                border-color: #777;
+            }
+            QPushButton:pressed {
+                background-color: #1a1a1a;
+            }
+        """)
+        toolbar_row.addWidget(self.particles_button)
         
-        self.midi_device_combo = QComboBox()
-        self.midi_device_combo.setMinimumHeight(30)
-        self.midi_device_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.midi_device_combo.setPlaceholderText("Select MIDI device...")
-        self.midi_device_combo.addItem("Loading MIDI devices...")
-        self.midi_device_combo.setEnabled(False)  # Disabled until devices are loaded
-        midi_row.addWidget(self.midi_device_combo, 1)
+        # Devices button
+        self.devices_button = QPushButton("Devices")
+        self.devices_button.setFixedSize(70, 30)
+        self.devices_button.setToolTip("Configure audio and MIDI devices")
+        self.devices_button.setStyleSheet("""
+            QPushButton {
+                background-color: #2d2d2d;
+                border: 1px solid #555;
+                border-radius: 4px;
+                color: #ffffff;
+                font-size: 11px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #2d2d4a;
+                border-color: #777;
+            }
+            QPushButton:pressed {
+                background-color: #1a1a1a;
+            }
+        """)
+        toolbar_row.addWidget(self.devices_button)
         
+        # Add stretch to push right-aligned controls to the right
+        toolbar_row.addStretch()
+        
+        # Right-aligned controls: pause, clear, speed, delay
+        
+        # Piano roll control buttons
+        self.play_pause_button = QPushButton("Pause")
+        self.play_pause_button.setFixedSize(60, 30)
+        self.play_pause_button.setToolTip("Play/Pause piano roll")
+        self.play_pause_button.setStyleSheet("""
+            QPushButton {
+                background-color: #2d2d2d;
+                border: 1px solid #555;
+                border-radius: 4px;
+                color: #ffffff;
+                font-size: 11px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #353535;
+                border-color: #777;
+            }
+            QPushButton:pressed {
+                background-color: #1a1a1a;
+            }
+        """)
+        toolbar_row.addWidget(self.play_pause_button)
+        
+        self.clear_button = QPushButton("Clear")
+        self.clear_button.setFixedSize(50, 30)
+        self.clear_button.setToolTip("Clear all notes")
+        self.clear_button.setStyleSheet("""
+            QPushButton {
+                background-color: #2d2d2d;
+                border: 1px solid #555;
+                border-radius: 4px;
+                color: #ffffff;
+                font-size: 11px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #4a2d2d;
+                border-color: #777;
+            }
+            QPushButton:pressed {
+                background-color: #1a1a1a;
+            }
+        """)
+        toolbar_row.addWidget(self.clear_button)
+
         # Scroll speed control
         self.scroll_speed_input = QComboBox()
         self.scroll_speed_input.addItems(["Slower", "Slow", "Normal", "Fast", "Faster"])
@@ -294,7 +382,7 @@ class MainWindow(QMainWindow):
         self.scroll_speed_input.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.scroll_speed_input.setFixedWidth(80)
         self.scroll_speed_input.setToolTip("Piano roll scroll speed")
-        midi_row.addWidget(self.scroll_speed_input)
+        toolbar_row.addWidget(self.scroll_speed_input)
         
         # MIDI delay control
         self.midi_delay_input = QSpinBox()
@@ -335,83 +423,9 @@ class MainWindow(QMainWindow):
                 background: transparent;
             }
         """)
-        midi_row.addWidget(self.midi_delay_input)
+        toolbar_row.addWidget(self.midi_delay_input)
         
-        # Piano roll control buttons
-        self.play_pause_button = QPushButton("Pause")
-        self.play_pause_button.setFixedSize(60, 30)
-        self.play_pause_button.setToolTip("Play/Pause piano roll")
-        self.play_pause_button.setStyleSheet("""
-            QPushButton {
-                background-color: #2d2d2d;
-                border: 1px solid #555;
-                border-radius: 4px;
-                color: #ffffff;
-                font-size: 11px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #353535;
-                border-color: #777;
-            }
-            QPushButton:pressed {
-                background-color: #1a1a1a;
-            }
-        """)
-        midi_row.addWidget(self.play_pause_button)
-        
-        self.clear_button = QPushButton("Clear")
-        self.clear_button.setFixedSize(50, 30)
-        self.clear_button.setToolTip("Clear all notes")
-        self.clear_button.setStyleSheet("""
-            QPushButton {
-                background-color: #2d2d2d;
-                border: 1px solid #555;
-                border-radius: 4px;
-                color: #ffffff;
-                font-size: 11px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #4a2d2d;
-                border-color: #777;
-            }
-            QPushButton:pressed {
-                background-color: #1a1a1a;
-            }
-        """)
-        midi_row.addWidget(self.clear_button)
-
-        # Particles configuration button
-        self.particles_button = QPushButton("Particles")
-        self.particles_button.setFixedSize(70, 30)
-        self.particles_button.setToolTip("Configure particle effects")
-        self.particles_button.setStyleSheet("""
-            QPushButton {
-                background-color: #2d2d2d;
-                border: 1px solid #555;
-                border-radius: 4px;
-                color: #ffffff;
-                font-size: 11px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #2d4a2d;
-                border-color: #777;
-            }
-            QPushButton:pressed {
-                background-color: #1a1a1a;
-            }
-        """)
-        midi_row.addWidget(self.particles_button)
-        
-        # View toggle button
-        self.view_toggle_button = QPushButton("Piano Roll")
-        self.view_toggle_button.setFixedSize(80, 30)
-        self.view_toggle_button.setToolTip("Switch between spectrum analyzer and piano roll")
-        midi_row.addWidget(self.view_toggle_button)
-        
-        layout.addLayout(midi_row)
+        layout.addLayout(toolbar_row)
         
         # Placeholder for visualization widgets - will be replaced with actual widgets when needed
         self.spectrum_placeholder = QLabel("Loading visualization...")
@@ -425,6 +439,19 @@ class MainWindow(QMainWindow):
             font-size: 12px;
         """)
         layout.addWidget(self.spectrum_placeholder, 1)
+        
+        # Initialize device combo boxes for internal use (not displayed)
+        self.input_device_combo = QComboBox()
+        self.input_device_combo.addItem("Loading input devices...")
+        self.input_device_combo.setEnabled(False)
+        
+        self.output_device_combo = QComboBox()
+        self.output_device_combo.addItem("Loading output devices...")
+        self.output_device_combo.setEnabled(False)
+        
+        self.midi_device_combo = QComboBox()
+        self.midi_device_combo.addItem("Loading MIDI devices...")
+        self.midi_device_combo.setEnabled(False)
         
         # Will be replaced later
         self.spectrum_analyzer = None
@@ -442,10 +469,7 @@ class MainWindow(QMainWindow):
         # MIDI manager signals
         self.midi_manager.error_occurred.connect(self.show_error)
         
-        # UI signals
-        self.input_device_combo.currentTextChanged.connect(self.on_input_device_changed)
-        self.output_device_combo.currentTextChanged.connect(self.on_output_device_changed)
-        self.midi_device_combo.currentTextChanged.connect(self.on_midi_device_changed)
+        # UI signals - only non-device controls
         self.scroll_speed_input.currentTextChanged.connect(self.on_scroll_speed_changed)
         self.midi_delay_input.valueChanged.connect(self.on_midi_delay_changed)
         self.mute_button.clicked.connect(self.toggle_mute)
@@ -453,66 +477,75 @@ class MainWindow(QMainWindow):
         self.play_pause_button.clicked.connect(self.toggle_piano_roll_playback)
         self.clear_button.clicked.connect(self.clear_piano_roll)
         self.particles_button.clicked.connect(self.open_particle_config)
+        self.devices_button.clicked.connect(self.open_device_config)
     
     def on_input_device_changed(self, display_name: str):
-        """Handle input device selection change"""
+        """Handle input device selection change from device dialog"""
         if not display_name or display_name.startswith("Loading") or display_name.startswith("Error") or display_name == "No input devices found":
             return
         
         # Get device from mapping
-        input_device = self.input_device_map.get(display_name)
+        new_device = self.input_device_map.get(display_name)
         
-        if input_device:
+        if new_device and new_device != self.current_input_device:
+            self.current_input_device = new_device
+            
             # Save the device selection
-            self.settings_manager.set_last_input_device(input_device.name)
+            self.settings_manager.set_last_input_device(display_name)  # Save display name
             self.settings_manager.save_settings()
             
-            # Only try to start streaming if we're not currently loading device settings
-            if not self.loading_device_settings:
-                self.try_start_streaming()
+            # Restart streaming with new device
+            self.restart_streaming()
     
     def on_output_device_changed(self, display_name: str):
-        """Handle output device selection change"""
+        """Handle output device selection change from device dialog"""
         if not display_name or display_name.startswith("Loading") or display_name.startswith("Error"):
             return
         
-        # Save the device selection
-        self.settings_manager.set_last_output_device(display_name)
-        self.settings_manager.save_settings()
+        # Get device from mapping (can be device object or "Default Output")
+        new_device = self.output_device_map.get(display_name)
         
-        # Only try to start streaming if we're not currently loading device settings
-        if not self.loading_device_settings:
-            self.try_start_streaming()
+        if new_device != self.current_output_device:
+            self.current_output_device = new_device
+            
+            # Save the device selection
+            self.settings_manager.set_last_output_device(display_name)
+            self.settings_manager.save_settings()
+            
+            # Restart streaming with new device
+            self.restart_streaming()
     
     def on_midi_device_changed(self, display_name: str):
-        """Handle MIDI device selection change"""
+        """Handle MIDI device selection change from device dialog"""
         if not display_name or display_name.startswith("Loading") or display_name.startswith("Error"):
             return
         
         # Get device from mapping
-        midi_device = self.midi_device_map.get(display_name)
+        new_device = self.midi_device_map.get(display_name)
         
-        if midi_device:
-            # Test device first
-            if self.midi_manager.test_device(midi_device):
-                # Start MIDI listening
-                success = self.midi_manager.start_listening(midi_device)
-                if success:
-                    # Save the device selection
-                    self.settings_manager.set_last_midi_device(midi_device.name)
-                    self.settings_manager.save_settings()
-                    print(f"MIDI device '{midi_device.name}' connected successfully")
-                else:
-                    print(f"Failed to start listening on MIDI device '{midi_device.name}'")
-            else:
-                print(f"MIDI device '{midi_device.name}' test failed - device may be in use")
-                self.show_error(f"Cannot use MIDI device '{midi_device.name}' - it may be in use by another application")
-        else:
-            # "No MIDI" selected - stop MIDI listening
+        if new_device != self.current_midi_device:
+            # Stop current MIDI listening
             self.midi_manager.stop_listening()
-            if display_name == "No MIDI":
+            
+            self.current_midi_device = new_device
+            
+            # Start new MIDI listening if device is selected
+            if new_device:
+                success = self.midi_manager.start_listening(new_device)
+                if success:
+                    self.settings_manager.set_last_midi_device(display_name)
+                    self.settings_manager.save_settings()
+                else:
+                    self.current_midi_device = None  # Reset on failure
+            else:
+                # "No MIDI" selected
                 self.settings_manager.set_last_midi_device("")
                 self.settings_manager.save_settings()
+    
+    def restart_streaming(self):
+        """Restart audio streaming with current devices"""
+        self.audio_manager.stop_streaming()
+        self.try_start_streaming()
     
     def on_scroll_speed_changed(self, speed_text: str):
         """Handle scroll speed change"""
@@ -575,49 +608,95 @@ class MainWindow(QMainWindow):
         dialog = ParticleConfigDialog(self.piano_roll, self)
         dialog.show()
     
-    def try_start_streaming(self):
-        """Try to start streaming only if both input and output devices are properly selected"""
+    def open_device_config(self):
+        """Open the device configuration dialog"""
         if not self.devices_loaded:
+            QMessageBox.information(self, "Devices Loading", 
+                                   "Devices are still loading. Please wait a moment and try again.")
             return
         
-        input_device = self.get_selected_input_device()
-        output_device = self.get_selected_output_device()
+        try:
+            # Import the device config dialog
+            from .device_config_dialog import DeviceConfigDialog
+        except ImportError:
+            from ui.device_config_dialog import DeviceConfigDialog
         
-        # Only start streaming if we have an input device
-        # Output device can be None (default) but input device is required
-        if input_device:
-            self.audio_manager.start_streaming(input_device, output_device)
-    
-    def get_selected_input_device(self):
-        """Get the currently selected input device"""
-        display_name = self.input_device_combo.currentText()
-        
-        # Check if devices are loaded and we have a valid selection
-        if (self.devices_loaded and 
-            display_name and 
-            not display_name.startswith("Loading") and 
-            not display_name.startswith("Error") and
-            display_name != "No input devices found" and
-            display_name in self.input_device_map):
+        # Create the dialog if it doesn't exist
+        if not self.device_config_dialog:
+            self.device_config_dialog = DeviceConfigDialog(
+                self.input_device_map, 
+                self.output_device_map, 
+                self.midi_device_map, 
+                self
+            )
             
-            return self.input_device_map.get(display_name)
+            # Connect signals
+            self.device_config_dialog.input_device_changed.connect(self.on_input_device_changed)
+            self.device_config_dialog.output_device_changed.connect(self.on_output_device_changed)
+            self.device_config_dialog.midi_device_changed.connect(self.on_midi_device_changed)
+            self.device_config_dialog.refresh_devices_requested.connect(self.refresh_devices)
+        else:
+            # Update device maps in existing dialog
+            self.device_config_dialog.update_device_maps(
+                self.input_device_map, 
+                self.output_device_map, 
+                self.midi_device_map
+            )
         
-        return None
+        # Always set current device selections in the dialog (this ensures sync)
+        current_input = None
+        current_output = None
+        current_midi = None
+        
+        # Find display names for current devices
+        if self.current_input_device:
+            for display_name, device in self.input_device_map.items():
+                if device == self.current_input_device:
+                    current_input = display_name
+                    break
+        
+        if self.current_output_device:
+            if self.current_output_device == "Default Output":
+                current_output = "Default Output"
+            else:
+                for display_name, device in self.output_device_map.items():
+                    if device == self.current_output_device:
+                        current_output = display_name
+                        break
+        
+        if self.current_midi_device:
+            for display_name, device in self.midi_device_map.items():
+                if device == self.current_midi_device:
+                    current_midi = display_name
+                    break
+        else:
+            current_midi = "No MIDI"
+        
+        self.device_config_dialog.set_current_devices(current_input, current_output, current_midi)
+        
+        # Show the dialog
+        self.device_config_dialog.show()
+        self.device_config_dialog.raise_()
+        self.device_config_dialog.activateWindow()
     
-    def get_selected_output_device(self):
-        """Get the currently selected output device"""
-        display_name = self.output_device_combo.currentText()
+    def refresh_devices(self):
+        """Refresh all devices (called from device config dialog)"""
+        if self.device_worker and self.device_worker.isRunning():
+            return  # Already refreshing
         
-        # Check if devices are loaded and we have a valid selection
-        if (self.devices_loaded and 
-            display_name and 
-            not display_name.startswith("Loading") and 
-            not display_name.startswith("Error") and
-            display_name in self.output_device_map):
-            
-            return self.output_device_map.get(display_name)
+        # Restart device loading
+        self.devices_loaded = False
+        self.start_device_loading()
+    
+    def try_start_streaming(self):
+        """Try to start streaming with current devices"""
+        if not self.devices_loaded or not self.current_input_device:
+            return
         
-        return None
+        # Determine the actual output device to pass to audio manager
+        output_device = None if self.current_output_device == "Default Output" else self.current_output_device
+        
+        self.audio_manager.start_streaming(self.current_input_device, output_device)
     
     def toggle_mute(self):
         """Toggle mute state"""
@@ -671,50 +750,12 @@ class MainWindow(QMainWindow):
                 self.restoreGeometry(geometry)
             except:
                 pass  # Ignore geometry restore errors
+        
+        # Load other preferences that don't depend on devices
+        self.load_ui_preferences()
     
-    def load_device_settings(self):
-        """Load device settings after devices are loaded"""
-        # Set flag to prevent device change signals from starting streaming prematurely
-        self.loading_device_settings = True
-        
-        # Load last input device
-        last_input_device = self.settings_manager.get_last_input_device()
-        if last_input_device:
-            # Find the display name that corresponds to this device
-            for display_name, device in self.input_device_map.items():
-                if device and device.name == last_input_device:
-                    index = self.input_device_combo.findText(display_name)
-                    if index >= 0:
-                        self.input_device_combo.setCurrentIndex(index)
-                        break
-        
-        # Load last output device  
-        last_output_device = self.settings_manager.get_last_output_device()
-        if last_output_device:
-            # Find exact match first
-            index = self.output_device_combo.findText(last_output_device)
-            if index >= 0:
-                self.output_device_combo.setCurrentIndex(index)
-            else:
-                self.output_device_combo.setCurrentIndex(0)
-        else:
-            # Default to "Default Output" if no saved preference
-            self.output_device_combo.setCurrentIndex(0)
-        
-        # Load last MIDI device
-        last_midi_device = self.settings_manager.get_last_midi_device()
-        if last_midi_device:
-            # Find the display name that corresponds to this device
-            for display_name, device in self.midi_device_map.items():
-                if device and device.name == last_midi_device:
-                    index = self.midi_device_combo.findText(display_name)
-                    if index >= 0:
-                        self.midi_device_combo.setCurrentIndex(index)
-                        break
-        else:
-            # Default to "No MIDI" if no saved preference
-            self.midi_device_combo.setCurrentIndex(0)
-        
+    def load_ui_preferences(self):
+        """Load UI preferences that don't depend on devices"""
         # Load view preference
         self.show_piano_roll = self.settings_manager.get_show_piano_roll()
         
@@ -737,11 +778,6 @@ class MainWindow(QMainWindow):
         # Load MIDI delay preference
         saved_delay = self.settings_manager.get_midi_delay()
         self.midi_delay_input.setValue(saved_delay)
-        
-        # Clear flag and try to start streaming now that both devices are loaded
-        self.loading_device_settings = False
-        self.try_start_streaming()
-
     
     def closeEvent(self, event):
         """Handle window close event"""
