@@ -112,6 +112,14 @@ class SettingsManager(QObject):
         """Set the last used output device name"""
         self.set_setting('last_output_device', device_name)
     
+    def get_last_midi_device(self) -> Optional[str]:
+        """Get the last used MIDI device name"""
+        return self.get_setting('last_midi_device')
+    
+    def set_last_midi_device(self, device_name: str):
+        """Set the last used MIDI device name"""
+        self.set_setting('last_midi_device', device_name)
+    
     # Backward compatibility
     def get_last_device(self) -> Optional[str]:
         """Get the last used device name (backward compatibility)"""
@@ -137,3 +145,11 @@ class SettingsManager(QObject):
     def set_theme(self, theme: str):
         """Set current theme"""
         self.set_setting("theme", theme)
+    
+    def get_show_piano_roll(self) -> bool:
+        """Get whether to show piano roll view"""
+        return self.get_setting('show_piano_roll', False)
+    
+    def set_show_piano_roll(self, show_piano_roll: bool):
+        """Set whether to show piano roll view"""
+        self.set_setting('show_piano_roll', show_piano_roll)

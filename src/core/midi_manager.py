@@ -1,0 +1,163 @@
+from typing import List, Optional, Callable
+from PySide6.QtCore import QObject, Signal
+import time
+
+# Defer heavy imports until needed
+_rtmidi = None
+
+def _get_rtmidi():
+    """Lazy import of rtmidi"""
+    global _rtmidi
+    if _rtmidi is None:
+        try:
+            import rtmidi
+            _rtmidi = rtmidi
+        except ImportError:
+            print("python-rtmidi not installed. Install with: pip install python-rtmidi")
+            raise
+    return _rtmidi
+
+
+class MIDIDevice:
+    """Represents a MIDI input device"""
+    def __init__(self, index: int, name: str):
+        self.index = index
+        self.name = name
+    
+    def __repr__(self):
+        return f"MIDIDevice(index={self.index}, name='{self.name}')"
+
+
+class MIDIManager(QObject):
+    """Manages MIDI input functionality"""
+    
+    # Signals for UI updates
+    note_on = Signal(int, int)   # note_number, velocity
+    note_off = Signal(int)       # note_number
+    error_occurred = Signal(str) # error_message
+    
+    def __init__(self):
+        super().__init__()
+        self.midi_in = None
+        self.current_device: Optional[MIDIDevice] = None
+        self.available_devices: List[MIDIDevice] = []
+        
+    def refresh_devices(self) -> List[MIDIDevice]:
+        """Refresh and return list of available MIDI input devices"""
+        self.available_devices.clear()
+        
+        try:
+            rtmidi = _get_rtmidi()
+            midi_in = rtmidi.MidiIn()
+            
+            # Get available ports
+            ports = midi_in.get_ports()
+            
+            for i, port_name in enumerate(ports):
+                device = MIDIDevice(index=i, name=port_name.strip())
+                self.available_devices.append(device)
+            
+            midi_in.close_port()
+            del midi_in
+            
+        except Exception as e:
+            self.error_occurred.emit(f"Failed to query MIDI devices: {str(e)}")
+        
+        return self.available_devices
+    
+    def get_device_by_name(self, name: str) -> Optional[MIDIDevice]:
+        """Find MIDI device by name"""
+        return next((device for device in self.available_devices if device.name == name), None)
+    
+    def start_listening(self, device: MIDIDevice) -> bool:
+        """Start listening to MIDI input from the specified device"""
+        try:
+            self.stop_listening()
+            
+            rtmidi = _get_rtmidi()
+            self.midi_in = rtmidi.MidiIn()
+            
+            # Check if the device index is still valid
+            available_ports = self.midi_in.get_ports()
+            if device.index >= len(available_ports):
+                error_msg = f"MIDI device index {device.index} is no longer valid"
+                self.error_occurred.emit(error_msg)
+                return False
+            
+            # Set callback for MIDI messages
+            self.midi_in.set_callback(self._midi_callback)
+            
+            # Open the specified port
+            self.midi_in.open_port(device.index)
+            
+            self.current_device = device
+            return True
+            
+        except Exception as e:
+            error_msg = f"Failed to start MIDI listening: {str(e)}"
+            self.error_occurred.emit(error_msg)
+            return False
+    
+    def stop_listening(self):
+        """Stop MIDI input listening"""
+        if self.midi_in:
+            try:
+                self.midi_in.close_port()
+                self.midi_in = None
+                self.current_device = None
+            except Exception as e:
+                print(f"Error stopping MIDI listening: {e}")
+    
+    def _midi_callback(self, event, data=None):
+        """Handle incoming MIDI messages"""
+        message, deltatime = event
+        
+        if len(message) >= 2:
+            status = message[0]
+            
+            # Note On (0x90-0x9F)
+            if status >= 0x90 and status <= 0x9F:
+                note = message[1]
+                velocity = message[2] if len(message) > 2 else 64
+                
+                if velocity > 0:
+                    self.note_on.emit(note, velocity)
+                else:
+                    # Note on with velocity 0 is equivalent to note off
+                    self.note_off.emit(note)
+            
+            # Note Off (0x80-0x8F)
+            elif status >= 0x80 and status <= 0x8F:
+                note = message[1]
+                self.note_off.emit(note)
+    
+    def is_listening(self) -> bool:
+        """Check if currently listening to MIDI"""
+        return self.midi_in is not None
+    
+    def get_current_device_name(self) -> str:
+        """Get name of currently selected MIDI device"""
+        return self.current_device.name if self.current_device else ""
+    
+    def test_device(self, device: MIDIDevice) -> bool:
+        """Test if a MIDI device can be opened without starting listening"""
+        try:
+            rtmidi = _get_rtmidi()
+            test_midi_in = rtmidi.MidiIn()
+            
+            # Check if the device index is valid
+            available_ports = test_midi_in.get_ports()
+            if device.index >= len(available_ports):
+                test_midi_in.close_port()
+                del test_midi_in
+                return False
+            
+            # Try to open and immediately close
+            test_midi_in.open_port(device.index)
+            test_midi_in.close_port()
+            del test_midi_in
+            return True
+            
+        except Exception as e:
+            print(f"MIDI device test failed for {device.name}: {e}")
+            return False

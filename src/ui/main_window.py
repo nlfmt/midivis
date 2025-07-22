@@ -7,6 +7,7 @@ from PySide6.QtGui import QIcon, QFont
 try:
     from ..core.audio_manager import AudioManager, AudioDevice
     from ..core.settings_manager import SettingsManager
+    from ..core.midi_manager import MIDIManager, MIDIDevice
     # Defer spectrum analyzer import to reduce startup time
 except ImportError:
     # For direct execution from src directory
@@ -16,24 +17,27 @@ except ImportError:
     sys.path.insert(0, current_dir)
     from core.audio_manager import AudioManager, AudioDevice
     from core.settings_manager import SettingsManager
+    from core.midi_manager import MIDIManager, MIDIDevice
     # Defer spectrum analyzer import to reduce startup time
 
 
 class DeviceLoadWorker(QThread):
-    """Worker thread for loading audio devices asynchronously"""
+    """Worker thread for loading audio and MIDI devices asynchronously"""
     
-    devices_loaded = Signal(list, list)  # Emits lists of input and output AudioDevice objects
+    devices_loaded = Signal(list, list, list)  # Emits lists of input, output AudioDevice objects, and MIDI devices
     error_occurred = Signal(str)         # Emits error message
     
-    def __init__(self, audio_manager):
+    def __init__(self, audio_manager, midi_manager):
         super().__init__()
         self.audio_manager = audio_manager
+        self.midi_manager = midi_manager
     
     def run(self):
         """Load devices in background thread"""
         try:
             input_devices, output_devices = self.audio_manager.refresh_devices()
-            self.devices_loaded.emit(input_devices, output_devices)
+            midi_devices = self.midi_manager.refresh_devices()
+            self.devices_loaded.emit(input_devices, output_devices, midi_devices)
         except Exception as e:
             self.error_occurred.emit(str(e))
 
@@ -46,13 +50,17 @@ class MainWindow(QMainWindow):
         
         # Initialize managers (but don't load devices yet)
         self.audio_manager = AudioManager(lazy_init=True)  # Don't load devices in constructor
+        self.midi_manager = MIDIManager()
         self.settings_manager = SettingsManager()
         
         # UI components
         self.input_device_combo = None
         self.output_device_combo = None
+        self.midi_device_combo = None
         self.mute_button = None
+        self.view_toggle_button = None
         self.spectrum_analyzer = None
+        self.piano_roll = None
         self.device_worker = None
         
         # Loading state
@@ -60,6 +68,8 @@ class MainWindow(QMainWindow):
         self.loading_device_settings = False  # Flag to prevent premature streaming during device loading
         self.input_device_map = {}  # Maps display names to device objects
         self.output_device_map = {}  # Maps display names to device objects
+        self.midi_device_map = {}   # Maps display names to MIDI device objects
+        self.show_piano_roll = False  # Toggle between spectrum and piano roll
         
         # Setup window
         self.setWindowTitle("Audio Input Streamer")
@@ -73,25 +83,27 @@ class MainWindow(QMainWindow):
         self.start_device_loading()
     
     def start_device_loading(self):
-        """Start loading audio devices in a background thread"""
-        self.device_worker = DeviceLoadWorker(self.audio_manager)
+        """Start loading audio and MIDI devices in a background thread"""
+        self.device_worker = DeviceLoadWorker(self.audio_manager, self.midi_manager)
         self.device_worker.devices_loaded.connect(self.on_devices_loaded)
         self.device_worker.error_occurred.connect(self.on_device_load_error)
         self.device_worker.start()
     
-    def on_devices_loaded(self, input_devices, output_devices):
+    def on_devices_loaded(self, input_devices, output_devices, midi_devices):
         """Handle devices loaded from background thread"""
         self.devices_loaded = True
-        self.populate_device_combos(input_devices, output_devices)
+        self.populate_device_combos(input_devices, output_devices, midi_devices)
         
         # Load settings now that devices are available
         self.load_device_settings()
         
-        # Initialize spectrum analyzer now that we're ready
-        self.initialize_spectrum_analyzer()
+        # Initialize spectrum analyzer and piano roll now that we're ready
+        self.initialize_visualization_widgets()
     
-    def initialize_spectrum_analyzer(self):
-        """Initialize the spectrum analyzer (deferred to reduce startup time)"""
+    def initialize_visualization_widgets(self):
+        """Initialize the spectrum analyzer and piano roll (deferred to reduce startup time)"""
+        central_widget = self.centralWidget()
+        
         if self.spectrum_analyzer is None:
             try:
                 # Import spectrum analyzer only when needed
@@ -100,13 +112,9 @@ class MainWindow(QMainWindow):
                 except ImportError:
                     from ui.spectrum_analyzer import SpectrumAnalyzer
                 
-                self.spectrum_analyzer = SpectrumAnalyzer()
+                self.spectrum_analyzer = SpectrumAnalyzer(parent=central_widget)
                 self.spectrum_analyzer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-                
-                # Replace placeholder with actual analyzer
-                layout = self.centralWidget().layout()
-                layout.replaceWidget(self.spectrum_placeholder, self.spectrum_analyzer)
-                self.spectrum_placeholder.deleteLater()
+                self.spectrum_analyzer.setMinimumHeight(200)
                 
                 # Connect audio signal
                 if hasattr(self.audio_manager, 'audio_data_ready'):
@@ -114,7 +122,31 @@ class MainWindow(QMainWindow):
                     
             except Exception as e:
                 print(f"Failed to initialize spectrum analyzer: {e}")
-                # Keep the placeholder if initialization fails
+                
+        if self.piano_roll is None:
+            try:
+                # Import piano roll only when needed
+                try:
+                    from .piano_roll import PianoRollWidget
+                except ImportError:
+                    from ui.piano_roll import PianoRollWidget
+                
+                self.piano_roll = PianoRollWidget(parent=central_widget)
+                self.piano_roll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+                self.piano_roll.setMinimumHeight(200)
+                
+                # Connect MIDI signals
+                self.midi_manager.note_on.connect(self.piano_roll.add_note_on)
+                self.midi_manager.note_off.connect(self.piano_roll.add_note_off)
+                
+            except Exception as e:
+                print(f"Failed to initialize piano roll: {e}")
+        
+        # Update visualization widget based on current setting
+        self.update_visualization_widget()
+        
+        # Add test functionality - double-click piano roll button to test
+        self.view_toggle_button.mouseDoubleClickEvent = self.test_piano_roll_display
     
     def on_device_load_error(self, error_message):
         """Handle error loading devices"""
@@ -126,13 +158,18 @@ class MainWindow(QMainWindow):
         self.output_device_combo.addItem(f"Error: {error_message}")
         self.output_device_combo.setEnabled(False)
         
-        self.show_error(f"Failed to load audio devices: {error_message}")
+        self.midi_device_combo.clear()
+        self.midi_device_combo.addItem(f"Error: {error_message}")
+        self.midi_device_combo.setEnabled(False)
+        
+        self.show_error(f"Failed to load devices: {error_message}")
     
-    def populate_device_combos(self, input_devices, output_devices):
+    def populate_device_combos(self, input_devices, output_devices, midi_devices):
         """Populate the device combo boxes with loaded devices"""
         # Clear mappings
         self.input_device_map.clear()
         self.output_device_map.clear()
+        self.midi_device_map.clear()
         
         # Populate input devices
         self.input_device_combo.clear()
@@ -169,11 +206,28 @@ class MainWindow(QMainWindow):
                 display_name = f"{device.name} ({api_short})"
                 self.output_device_combo.addItem(display_name)
                 self.output_device_map[display_name] = device
+        
+        # Populate MIDI devices
+        self.midi_device_combo.clear()
+        self.midi_device_combo.setPlaceholderText("Select MIDI device...")
+        self.midi_device_combo.setEnabled(True)
+        
+        # Add "No MIDI" as first option
+        self.midi_device_combo.addItem("No MIDI")
+        self.midi_device_map["No MIDI"] = None
+        
+        if not midi_devices:
+            self.midi_device_combo.addItem("No MIDI devices found")
+        else:
+            for device in midi_devices:
+                display_name = device.name
+                self.midi_device_combo.addItem(display_name)
+                self.midi_device_map[display_name] = device
     
     def setup_ui(self):
         """Setup the user interface"""
-        self.setMinimumSize(350, 240)  # Minimum size for usability
-        self.resize(450, 390)  # Default size
+        self.setMinimumSize(350, 280)  # Minimum size for usability (increased for MIDI row)
+        self.resize(450, 430)  # Default size (increased for MIDI row)
         
         # Central widget
         central_widget = QWidget()
@@ -214,8 +268,28 @@ class MainWindow(QMainWindow):
         
         layout.addLayout(device_row)
         
-        # Placeholder for spectrum analyzer - will be replaced with actual analyzer when needed
-        self.spectrum_placeholder = QLabel("Loading spectrum analyzer...")
+        # MIDI and visualization control row
+        midi_row = QHBoxLayout()
+        midi_row.setSpacing(8)
+        
+        self.midi_device_combo = QComboBox()
+        self.midi_device_combo.setMinimumHeight(30)
+        self.midi_device_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.midi_device_combo.setPlaceholderText("Select MIDI device...")
+        self.midi_device_combo.addItem("Loading MIDI devices...")
+        self.midi_device_combo.setEnabled(False)  # Disabled until devices are loaded
+        midi_row.addWidget(self.midi_device_combo, 1)
+        
+        # View toggle button
+        self.view_toggle_button = QPushButton("Piano Roll")
+        self.view_toggle_button.setFixedSize(80, 30)
+        self.view_toggle_button.setToolTip("Switch between spectrum analyzer and piano roll")
+        midi_row.addWidget(self.view_toggle_button)
+        
+        layout.addLayout(midi_row)
+        
+        # Placeholder for visualization widgets - will be replaced with actual widgets when needed
+        self.spectrum_placeholder = QLabel("Loading visualization...")
         self.spectrum_placeholder.setMinimumHeight(120)
         self.spectrum_placeholder.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.spectrum_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -229,6 +303,7 @@ class MainWindow(QMainWindow):
         
         # Will be replaced later
         self.spectrum_analyzer = None
+        self.piano_roll = None
     
     def setup_connections(self):
         """Setup signal-slot connections"""
@@ -239,10 +314,15 @@ class MainWindow(QMainWindow):
         self.audio_manager.error_occurred.connect(self.show_error)
         # Note: audio_data_ready connection will be made when spectrum analyzer is initialized
         
+        # MIDI manager signals
+        self.midi_manager.error_occurred.connect(self.show_error)
+        
         # UI signals
         self.input_device_combo.currentTextChanged.connect(self.on_input_device_changed)
         self.output_device_combo.currentTextChanged.connect(self.on_output_device_changed)
+        self.midi_device_combo.currentTextChanged.connect(self.on_midi_device_changed)
         self.mute_button.clicked.connect(self.toggle_mute)
+        self.view_toggle_button.clicked.connect(self.toggle_visualization)
     
     def on_input_device_changed(self, display_name: str):
         """Handle input device selection change"""
@@ -273,6 +353,36 @@ class MainWindow(QMainWindow):
         # Only try to start streaming if we're not currently loading device settings
         if not self.loading_device_settings:
             self.try_start_streaming()
+    
+    def on_midi_device_changed(self, display_name: str):
+        """Handle MIDI device selection change"""
+        if not display_name or display_name.startswith("Loading") or display_name.startswith("Error"):
+            return
+        
+        # Get device from mapping
+        midi_device = self.midi_device_map.get(display_name)
+        
+        if midi_device:
+            # Test device first
+            if self.midi_manager.test_device(midi_device):
+                # Start MIDI listening
+                success = self.midi_manager.start_listening(midi_device)
+                if success:
+                    # Save the device selection
+                    self.settings_manager.set_last_midi_device(midi_device.name)
+                    self.settings_manager.save_settings()
+                    print(f"MIDI device '{midi_device.name}' connected successfully")
+                else:
+                    print(f"Failed to start listening on MIDI device '{midi_device.name}'")
+            else:
+                print(f"MIDI device '{midi_device.name}' test failed - device may be in use")
+                self.show_error(f"Cannot use MIDI device '{midi_device.name}' - it may be in use by another application")
+        else:
+            # "No MIDI" selected - stop MIDI listening
+            self.midi_manager.stop_listening()
+            if display_name == "No MIDI":
+                self.settings_manager.set_last_midi_device("")
+                self.settings_manager.save_settings()
     
     def try_start_streaming(self):
         """Try to start streaming only if both input and output devices are properly selected"""
@@ -400,6 +510,23 @@ class MainWindow(QMainWindow):
             # Default to "Default Output" if no saved preference
             self.output_device_combo.setCurrentIndex(0)
         
+        # Load last MIDI device
+        last_midi_device = self.settings_manager.get_last_midi_device()
+        if last_midi_device:
+            # Find the display name that corresponds to this device
+            for display_name, device in self.midi_device_map.items():
+                if device and device.name == last_midi_device:
+                    index = self.midi_device_combo.findText(display_name)
+                    if index >= 0:
+                        self.midi_device_combo.setCurrentIndex(index)
+                        break
+        else:
+            # Default to "No MIDI" if no saved preference
+            self.midi_device_combo.setCurrentIndex(0)
+        
+        # Load view preference
+        self.show_piano_roll = self.settings_manager.get_show_piano_roll()
+        
         # Clear flag and try to start streaming now that both devices are loaded
         self.loading_device_settings = False
         self.try_start_streaming()
@@ -416,8 +543,9 @@ class MainWindow(QMainWindow):
             self.device_worker.quit()
             self.device_worker.wait(1000)  # Wait up to 1 second
         
-        # Stop audio streaming
+        # Stop audio streaming and MIDI listening
         self.audio_manager.stop_streaming()
+        self.midi_manager.stop_listening()
         
         event.accept()
     
@@ -434,3 +562,75 @@ class MainWindow(QMainWindow):
                 app.enable_dark_title_bar(hwnd)
             except Exception:
                 pass  # Silently fail if not supported
+    
+    def update_visualization_widget(self):
+        """Update which visualization widget is shown"""
+        layout = self.centralWidget().layout()
+        
+        # Get the current visualization widget or placeholder
+        current_widget = None
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item.widget() in [self.spectrum_placeholder, self.spectrum_analyzer, self.piano_roll]:
+                current_widget = item.widget()
+                break
+                
+        if not current_widget:
+            return
+            
+        # Handle switch to piano roll
+        if self.show_piano_roll:
+            if not self.piano_roll:
+                return
+                
+            if current_widget != self.piano_roll:
+                # Replace current widget with piano roll
+                layout.removeWidget(current_widget)
+                current_widget.hide()
+                current_widget.setParent(None)
+                
+                # Add piano roll
+                layout.addWidget(self.piano_roll, 1)
+                self.piano_roll.show()
+                self.piano_roll.raise_()
+                
+                # Update button text
+                self.view_toggle_button.setText("Spectrum")
+        
+        # Handle switch to spectrum analyzer
+        else:
+            if not self.spectrum_analyzer:
+                return
+                
+            if current_widget != self.spectrum_analyzer:
+                # Replace current widget with spectrum analyzer
+                layout.removeWidget(current_widget)
+                current_widget.hide()
+                current_widget.setParent(None)
+                
+                # Add spectrum analyzer
+                layout.addWidget(self.spectrum_analyzer, 1)
+                self.spectrum_analyzer.show()
+                self.spectrum_analyzer.raise_()
+                
+                # Update button text
+                self.view_toggle_button.setText("Piano Roll")
+    
+    def toggle_visualization(self):
+        """Toggle between spectrum analyzer and piano roll"""
+        self.show_piano_roll = not self.show_piano_roll
+        self.update_visualization_widget()
+        
+        # Save preference
+        self.settings_manager.set_show_piano_roll(self.show_piano_roll)
+        self.settings_manager.save_settings()
+    
+    def test_piano_roll_display(self, event=None):
+        """Test method to toggle to piano roll and add sample notes"""
+        # Force switch to piano roll
+        self.show_piano_roll = True
+        self.update_visualization_widget()
+        
+        # Add test notes if piano roll is available
+        if self.piano_roll:
+            self.piano_roll.test_piano_roll()
