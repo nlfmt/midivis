@@ -194,3 +194,54 @@ class MIDIManager(QObject):
         except Exception as e:
             print(f"MIDI device test failed for {device.name}: {e}")
             return False
+    
+    def start_demo_mode(self):
+        """Start demo mode that plays a sequence of notes to demonstrate the piano roll"""
+        # Define a simple melody sequence (note, velocity, duration_ms, pause_after_ms)
+        demo_sequence = [
+            # C major scale up
+            (60, 80, 300, 100),   # C4
+            (62, 75, 300, 100),   # D4
+            (64, 85, 300, 100),   # E4
+            (65, 70, 300, 100),   # F4
+            (67, 90, 300, 100),   # G4
+            (69, 75, 300, 100),   # A4
+            (71, 80, 300, 100),   # B4
+            (72, 95, 500, 200),   # C5 (longer note)
+            
+            # Simple chord progression
+            (60, 70, 800, 50),    # C4 chord start
+            (64, 70, 800, 50),    # E4
+            (67, 70, 800, 300),   # G4
+            
+            (65, 75, 800, 50),    # F4 chord
+            (69, 75, 800, 50),    # A4
+            (72, 75, 800, 300),   # C5
+            
+            (62, 80, 800, 50),    # D4 chord
+            (66, 80, 800, 50),    # F#4
+            (69, 80, 800, 300),   # A4
+            
+            (67, 85, 1000, 50),   # G4 final chord
+            (71, 85, 1000, 50),   # B4
+            (74, 85, 1000, 500),  # D5
+        ]
+        
+        self._play_demo_sequence(demo_sequence, 0)
+    
+    def _play_demo_sequence(self, sequence, index):
+        """Recursively play demo sequence notes"""
+        if index >= len(sequence):
+            return  # Demo finished
+        
+        note, velocity, duration_ms, pause_after_ms = sequence[index]
+        
+        # Play note on
+        self.note_on.emit(note, velocity)
+        
+        # Schedule note off
+        QTimer.singleShot(duration_ms, lambda: self.note_off.emit(note))
+        
+        # Schedule next note
+        next_delay = duration_ms + pause_after_ms
+        QTimer.singleShot(next_delay, lambda: self._play_demo_sequence(sequence, index + 1))

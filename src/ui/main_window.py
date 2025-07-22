@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                              QLabel, QComboBox, QPushButton, QFrame, QMessageBox, QSizePolicy, QApplication, QSpinBox)
 from PySide6.QtCore import Qt, QTimer, QThread, Signal
-from PySide6.QtGui import QIcon, QFont
+from PySide6.QtGui import QIcon, QFont, QKeySequence, QShortcut
 
 # Handle imports for both direct execution and package imports
 try:
@@ -71,6 +71,7 @@ class MainWindow(QMainWindow):
         self.piano_roll = None
         self.device_worker = None
         self.device_config_dialog = None  # Device configuration dialog
+        self.demo_shortcut = None  # F8 keyboard shortcut for demo mode
         
         # Loading state
         self.devices_loaded = False
@@ -80,7 +81,7 @@ class MainWindow(QMainWindow):
         self.show_piano_roll = False  # Toggle between spectrum and piano roll
         
         # Setup window
-        self.setWindowTitle("Audio Input Streamer")
+        self.setWindowTitle("Audio Input Streamer (F8: Demo)")  # Indicate F8 shortcut
         
         # Setup UI and connections
         self.setup_ui()
@@ -478,6 +479,10 @@ class MainWindow(QMainWindow):
         self.clear_button.clicked.connect(self.clear_piano_roll)
         self.particles_button.clicked.connect(self.open_particle_config)
         self.devices_button.clicked.connect(self.open_device_config)
+        
+        # Keyboard shortcuts
+        self.demo_shortcut = QShortcut(QKeySequence(Qt.Key.Key_F8), self)
+        self.demo_shortcut.activated.connect(self.start_demo_mode)
     
     def on_input_device_changed(self, display_name: str):
         """Handle input device selection change from device dialog"""
@@ -592,6 +597,22 @@ class MainWindow(QMainWindow):
         """Clear all notes from the piano roll"""
         if self.piano_roll:
             self.piano_roll.clear_notes()
+    
+    def start_demo_mode(self):
+        """Start demo mode that plays a sequence of notes (triggered by F8)"""
+        # Switch to piano roll view if not already active
+        if not self.show_piano_roll:
+            self.toggle_visualization()
+        
+        # Provide visual feedback in the window title
+        original_title = self.windowTitle()
+        self.setWindowTitle("Audio Input Streamer (Playing Demo...)")
+        
+        # Start the demo sequence
+        self.midi_manager.start_demo_mode()
+        
+        # Restore title after demo duration (approximately 10 seconds)
+        QTimer.singleShot(10000, lambda: self.setWindowTitle(original_title))
     
     def open_particle_config(self):
         """Open the particle configuration dialog"""
