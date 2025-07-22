@@ -1,8 +1,88 @@
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import Qt, QTimer, QRectF
-from PySide6.QtGui import QPainter, QBrush, QPen, QColor, QLinearGradient, QFont, QPainterPath
+from PySide6.QtCore import Qt, QTimer, QRectF, QPointF
+from PySide6.QtGui import QPainter, QBrush, QPen, QColor, QLinearGradient, QFont, QPainterPath, QRadialGradient
 import time
+import random
+import math
 from typing import Dict, List, Tuple
+
+
+class Particle:
+    """A single particle for visual effects"""
+    def __init__(self, x: float, y: float, color: QColor, velocity_x: float, velocity_y: float, life: float, size: float, turbulence_strength: float = 1.0, damping_factor: float = 0.985):
+        self.x = x
+        self.y = y
+        self.initial_color = color
+        self.color = QColor(color)
+        self.velocity_x = velocity_x
+        self.velocity_y = velocity_y
+        self.life = life
+        self.max_life = life
+        self.size = size
+        self.initial_size = self.size
+        self.damping_factor = damping_factor
+        
+        # Enhanced turbulence parameters for much more visible swirly motion
+        self.turbulence_time = random.uniform(0, math.pi * 2)  # Random phase offset
+        self.turbulence_freq_x = random.uniform(1.2, 3.0)     # Much higher frequency for tighter swirls
+        self.turbulence_freq_y = random.uniform(0.8, 2.5)     # Higher frequency for more visible swirls
+        self.turbulence_amplitude = random.uniform(25, 45) * turbulence_strength    # Adjustable turbulence strength
+        
+        # Secondary noise layer for 2D Perlin-like effect with different scales
+        self.noise_offset_x = random.uniform(0, 100)          # Random noise offset
+        self.noise_offset_y = random.uniform(0, 100)
+        self.turbulence_freq_x_2 = random.uniform(2.0, 4.5)  # Second layer with different frequency
+        self.turbulence_freq_y_2 = random.uniform(1.5, 3.8)  # Second layer with different frequency
+        self.turbulence_amplitude_2 = random.uniform(12, 25) * turbulence_strength # Secondary layer amplitude
+    
+    def update(self, dt: float):
+        """Update particle position and fade"""
+        # Update turbulence time - for swirly movement
+        self.turbulence_time += dt * 2.0  # Faster time progression for more dynamic swirls
+        
+        # Create layered 2D Perlin-like noise for complex swirly patterns
+        time_x = self.turbulence_time + self.noise_offset_x
+        time_y = self.turbulence_time + self.noise_offset_y
+        
+        # Primary turbulence layer (main swirl pattern)
+        turbulence_x1 = math.sin(time_x * self.turbulence_freq_x) * self.turbulence_amplitude * dt
+        turbulence_y1 = math.cos(time_y * self.turbulence_freq_y) * self.turbulence_amplitude * dt
+        
+        # Secondary noise layer (detail swirls with perpendicular pattern)
+        turbulence_x2 = math.cos(time_x * self.turbulence_freq_x_2 + math.pi/4) * self.turbulence_amplitude_2 * dt
+        turbulence_y2 = math.sin(time_y * self.turbulence_freq_y_2 + math.pi/3) * self.turbulence_amplitude_2 * dt
+        
+        # Tertiary layer for very complex motion (creates figure-8 like patterns)
+        turbulence_x3 = math.sin(time_x * self.turbulence_freq_x * 0.5) * math.cos(time_y * self.turbulence_freq_y * 0.7) * self.turbulence_amplitude * 0.2 * dt
+        turbulence_y3 = math.cos(time_x * self.turbulence_freq_x * 0.6) * math.sin(time_y * self.turbulence_freq_y * 0.4) * self.turbulence_amplitude * 0.2 * dt
+        
+        # Combine all turbulence layers for very complex swirly motion
+        total_turbulence_x = turbulence_x1 + turbulence_x2 + turbulence_x3
+        total_turbulence_y = turbulence_y1 + turbulence_y2 + turbulence_y3
+        
+        # Apply base velocity with enhanced turbulence
+        self.x += (self.velocity_x * dt) + total_turbulence_x
+        self.y += (self.velocity_y * dt) + total_turbulence_y
+        
+        self.life -= dt
+        
+        # Fade out as life decreases with steeper curve for better visibility
+        alpha_ratio = max(0, self.life / self.max_life)
+        alpha_curve = alpha_ratio * alpha_ratio  # Quadratic falloff for more dramatic fade
+        self.color.setAlpha(int(255 * alpha_curve))
+        
+        # Shrink particle size over its lifespan with some randomness
+        base_size_ratio = max(0.1, self.life / self.max_life)
+        size_variation = 1.0 + (math.sin(self.turbulence_time * 3.0) * 0.08)  # More size variation
+        self.size = self.initial_size * base_size_ratio * size_variation
+        
+        # Apply configurable damping to slow down particles over time
+        self.velocity_x *= self.damping_factor
+        self.velocity_y *= self.damping_factor
+    
+    def is_alive(self) -> bool:
+        """Check if particle is still alive"""
+        return self.life > 0
 
 
 class PianoRollWidget(QWidget):
@@ -25,6 +105,42 @@ class PianoRollWidget(QWidget):
         # Active notes tracking
         self.active_notes: Dict[int, Tuple[float, int]] = {}  # note -> (start_time, velocity)
         self.note_history: List[Tuple[int, float, float, int, float]] = []  # (note, start_time, end_time, velocity, visual_length)
+        
+        # Particle system
+        self.particles: List[Particle] = []
+        self.spark_particles: List[Particle] = []  # Small white spark particles
+        self.last_particle_time = 0.0
+        
+        # Particle system configuration - centralized parameters for easy tweaking
+        self.particle_config = {
+            'spawn_rate': 0.01,                    # seconds between particle spawns per active note
+            'initial_velocity_x_min': -5.0,       # minimum initial X velocity
+            'initial_velocity_x_max': 5.0,        # maximum initial X velocity
+            'initial_velocity_y_min': -80.0,      # minimum initial Y velocity (negative = upward)
+            'initial_velocity_y_max': -30.0,       # maximum initial Y velocity (negative = upward)
+            'initial_size_min': 0.4,              # minimum initial particle size
+            'initial_size_max': 0.8,              # maximum initial particle size
+            'initial_opacity_min': 40,            # minimum initial opacity (0-255)
+            'initial_opacity_max': 80,            # maximum initial opacity (0-255)
+            'turbulence_strength': 0.8,           # multiplier for turbulence amplitude (0.0-2.0+)
+            'damping_factor': 0.995,              # velocity damping per frame (0.0-1.0, lower = more damping)
+            'life_min': 0.5,                      # minimum particle life in seconds
+            'life_max': 3.0,                      # maximum particle life in seconds
+            'spawn_x_spread': 0.9,                # horizontal spread factor (0.0-1.0) across note width
+            'particles_per_note_base': 2,         # base number of particles per note
+            'particles_per_velocity': 20,         # velocity divisor for extra particles
+            'max_particles_per_note': 15,         # maximum particles per note per spawn
+            
+            # Spark particle configuration
+            'spark_enabled': True,                 # enable/disable spark particles
+            'spark_size_min': 0.3,                # minimum spark particle size (increased for visibility)
+            'spark_size_max': 0.5,                # maximum spark particle size (increased for visibility)
+            'spark_opacity_min': 150,             # minimum spark opacity (0-255) (increased for visibility)
+            'spark_opacity_max': 255,             # maximum spark opacity (0-255)
+            'spark_life_min': 0.5,                # minimum spark life in seconds (increased for visibility)
+            'spark_life_max': 2.0,                # maximum spark life in seconds (increased for visibility)
+            'spark_count_ratio': 0.8,             # ratio of sparks to regular particles (increased for more sparks)
+        }
         
         # Pause functionality
         self.is_paused = False
@@ -53,6 +169,7 @@ class PianoRollWidget(QWidget):
         # Track current time
         self.start_time = time.time()
         self.last_debug_time = 0
+        self.last_update_time = time.time()  # For particle system timing
         
         self.setMinimumHeight(200)
         # Remove the stylesheet to avoid background conflicts
@@ -123,6 +240,8 @@ class PianoRollWidget(QWidget):
         """Clear all notes and history"""
         self.active_notes.clear()
         self.note_history.clear()
+        self.particles.clear()  # Clear particles too
+        self.spark_particles.clear()  # Clear spark particles too
         self.update()  # Force immediate repaint
     
     def pause(self):
@@ -153,82 +272,105 @@ class PianoRollWidget(QWidget):
     def paintEvent(self, event):
         """Paint the piano roll waterfall"""
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
-        widget_width = self.width()
-        widget_height = self.height()
-        
-        # Handle paused state for time calculation
-        if self.is_paused:
-            # While paused, use the time when we paused minus any previous pause durations
-            current_time = self.pause_start_time - self.total_pause_duration
-        else:
-            # While playing, use current time minus all pause durations
-            current_time = time.time() - self.total_pause_duration
-        
-        # Clear the entire widget with transparent background first
-        painter.fillRect(self.rect(), QColor(0, 0, 0, 0))
-        
-        # Draw rounded background
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QBrush(QColor(20, 20, 20)))
-        painter.drawRoundedRect(QRectF(self.rect()), 8, 8)
-        
-        # Create rounded rectangle path for clipping content
-        content_rect = QRectF(self.rect())
-        content_path = QPainterPath()
-        content_path.addRoundedRect(content_rect, 8, 8)
-        
-        # Set clipping path for rounded corners
-        painter.setClipPath(content_path)
-        
-        # Draw piano key guides with white/black key visualization
-        key_width = self.key_width(widget_width)
-        
-        # Draw white keys first (background)
-        painter.setPen(Qt.PenStyle.NoPen)
-        for i in range(self.NUM_KEYS):
-            midi_note = i + self.LOWEST_NOTE
-            x = self.key_index_to_x(i, widget_width)
+        try:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             
-            if not self.is_black_key(midi_note):
-                # Draw white key - much darker and more subtle
-                painter.setBrush(QBrush(QColor(25, 25, 25)))
-                painter.drawRect(QRectF(x, 0, key_width, widget_height))
-        
-        # Draw black keys (overlay)
-        for i in range(self.NUM_KEYS):
-            midi_note = i + self.LOWEST_NOTE
-            x = self.key_index_to_x(i, widget_width)
+            widget_width = self.width()
+            widget_height = self.height()
             
-            if self.is_black_key(midi_note):
-                # Draw black key - slightly darker than background
-                painter.setBrush(QBrush(QColor(18, 18, 18)))
-                painter.drawRect(QRectF(x, 0, key_width, widget_height))
-        
-        # Draw octave separators for C notes - much more subtle
-        painter.setPen(QPen(QColor(35, 35, 35)))
-        for i in range(self.NUM_KEYS):
-            midi_note = i + self.LOWEST_NOTE
-            note_in_octave = midi_note % 12
-            if note_in_octave == 0:  # C notes
+            # Update particles and timing
+            current_real_time = time.time()
+            dt = current_real_time - self.last_update_time
+            self.last_update_time = current_real_time
+            
+            # Handle paused state for time calculation
+            if self.is_paused:
+                # While paused, use the time when we paused minus any previous pause durations
+                current_time = self.pause_start_time - self.total_pause_duration
+            else:
+                # While playing, use current time minus all pause durations
+                current_time = time.time() - self.total_pause_duration
+            
+            # Update and spawn particles for active notes
+            if not self.is_paused:
+                self._update_particles(dt)
+                self._spawn_particles_for_active_notes(current_time, widget_width, widget_height)
+            
+            # Clear the entire widget with transparent background first
+            painter.fillRect(self.rect(), QColor(0, 0, 0, 0))
+            
+            # Draw rounded background
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(QColor(20, 20, 20)))
+            painter.drawRoundedRect(QRectF(self.rect()), 8, 8)
+            
+            # Create rounded rectangle path for clipping content
+            content_rect = QRectF(self.rect())
+            content_path = QPainterPath()
+            content_path.addRoundedRect(content_rect, 8, 8)
+            
+            # Set clipping path for rounded corners
+            painter.setClipPath(content_path)
+            
+            # Draw piano key guides with white/black key visualization
+            key_width = self.key_width(widget_width)
+            
+            # Draw white keys first (background)
+            painter.setPen(Qt.PenStyle.NoPen)
+            for i in range(self.NUM_KEYS):
+                midi_note = i + self.LOWEST_NOTE
                 x = self.key_index_to_x(i, widget_width)
-                painter.drawLine(x, 0, x, widget_height)
-        
-        # Remove old notes from history - only remove when they're completely above the widget
-        self.note_history = [note_data for note_data in self.note_history 
-                           if self._note_still_visible(note_data, current_time, widget_height)]
-        
-        # Draw completed notes from history (these move upward as fixed rectangles)
-        for note, start_time, end_time, velocity, visual_length in self.note_history:
-            self._draw_completed_note_rectangle(painter, note, start_time, end_time, 
-                                              velocity, visual_length, current_time, widget_width, widget_height)
-        
-        # Draw active notes (these grow upward from the bottom)
-        for note, (start_time, velocity) in self.active_notes.items():
-            if start_time < current_time:
-                self._draw_active_note_rectangle(painter, note, start_time, 
-                                               velocity, current_time, widget_width, widget_height)
+                
+                if not self.is_black_key(midi_note):
+                    # Draw white key - much darker and more subtle
+                    painter.setBrush(QBrush(QColor(25, 25, 25)))
+                    painter.drawRect(QRectF(x, 0, key_width, widget_height))
+            
+            # Draw black keys (overlay)
+            for i in range(self.NUM_KEYS):
+                midi_note = i + self.LOWEST_NOTE
+                x = self.key_index_to_x(i, widget_width)
+                
+                if self.is_black_key(midi_note):
+                    # Draw black key - slightly darker than background
+                    painter.setBrush(QBrush(QColor(18, 18, 18)))
+                    painter.drawRect(QRectF(x, 0, key_width, widget_height))
+            
+            # Draw octave separators for C notes - much more subtle
+            painter.setPen(QPen(QColor(35, 35, 35)))
+            for i in range(self.NUM_KEYS):
+                midi_note = i + self.LOWEST_NOTE
+                note_in_octave = midi_note % 12
+                if note_in_octave == 0:  # C notes
+                    x = self.key_index_to_x(i, widget_width)
+                    painter.drawLine(x, 0, x, widget_height)
+            
+            # Remove old notes from history - only remove when they're completely above the widget
+            self.note_history = [note_data for note_data in self.note_history 
+                               if self._note_still_visible(note_data, current_time, widget_height)]
+            
+            # Draw completed notes from history (these move upward as fixed rectangles)
+            for note, start_time, end_time, velocity, visual_length in self.note_history:
+                self._draw_completed_note_rectangle(painter, note, start_time, end_time, 
+                                                  velocity, visual_length, current_time, widget_width, widget_height)
+            
+            # Draw active notes (these grow upward from the bottom)
+            for note, (start_time, velocity) in self.active_notes.items():
+                if start_time < current_time:
+                    self._draw_active_note_rectangle(painter, note, start_time, 
+                                                   velocity, current_time, widget_width, widget_height)
+            
+            # Draw particles on top of everything
+            self._draw_particles(painter)
+            
+            # Draw spark particles on top of regular particles
+            self._draw_spark_particles(painter)
+            
+        except Exception as e:
+            print(f"Error in paintEvent: {e}")
+        finally:
+            # Ensure painter is always properly ended
+            painter.end()
     
     def _draw_active_note_rectangle(self, painter: QPainter, note: int, start_time: float, 
                                   velocity: int, current_time: float, 
@@ -269,6 +411,9 @@ class PianoRollWidget(QWidget):
         rect_width = max(10, key_width * 0.9)
         x_center = x + (key_width / 2)
         rect = QRectF(x_center - (rect_width / 2), y_top, rect_width, rect_height)
+        
+        # Draw glow effect for active notes
+        self._draw_note_glow(painter, rect, color, intensity=1.5)
         
         # Draw with a white border for active notes
         painter.setPen(QPen(Qt.GlobalColor.white, 1))  # White border, 1 pixel width
@@ -342,6 +487,9 @@ class PianoRollWidget(QWidget):
         x_center = x + (key_width / 2)
         rect = QRectF(x_center - (rect_width / 2), y_top_draw, rect_width, rect_height)
         
+        # Draw subtle glow effect for completed notes
+        self._draw_note_glow(painter, rect, color, intensity=0.8)
+        
         # No border for completed notes - just the solid color
         painter.setPen(Qt.PenStyle.NoPen)
         
@@ -385,6 +533,286 @@ class PianoRollWidget(QWidget):
         # Only remove when the bottom is completely above the top of the widget
         return y_bottom >= 0
     
+    def _update_particles(self, dt: float):
+        """Update all particles"""
+        try:
+            # Update existing regular particles
+            particles_to_keep = []
+            for particle in self.particles:
+                particle.update(dt)
+                if particle.is_alive():
+                    particles_to_keep.append(particle)
+            self.particles = particles_to_keep
+            
+            # Update existing spark particles
+            spark_particles_to_keep = []
+            for particle in self.spark_particles:
+                particle.update(dt)
+                if particle.is_alive():
+                    spark_particles_to_keep.append(particle)
+            self.spark_particles = spark_particles_to_keep
+        except Exception as e:
+            print(f"Error updating particles: {e}")
+    
+    def _spawn_particles_for_active_notes(self, current_time: float, widget_width: int, widget_height: int):
+        """Spawn particles for active notes"""
+        try:
+            if current_time - self.last_particle_time < self.particle_config['spawn_rate']:
+                return
+            
+            # Calculate widget scale factor for particle size and speed
+            widget_scale = min(widget_width, widget_height) / 300.0  # Base scale on a 300px reference
+            widget_scale = max(0.5, min(3.0, widget_scale))  # Clamp between 0.5x and 3x
+            
+            for note, (start_time, velocity) in self.active_notes.items():
+                if start_time < current_time:
+                    # Calculate particle spawn position - always on top of the note and at bottom of widget
+                    key_index = self.note_to_key_index(note)
+                    key_width = self.key_width(widget_width)
+                    note_x_start = self.key_index_to_x(key_index, widget_width)
+                    
+                    # Get base color for particles - make it brighter and more vibrant
+                    base_color = self.velocity_to_color(velocity)
+                    
+                    # Spawn multiple particles per note using configuration
+                    base_particle_count = max(self.particle_config['particles_per_note_base'], 
+                                            velocity // self.particle_config['particles_per_velocity'])
+                    scaled_particle_count = int(base_particle_count * widget_scale)
+                    num_particles = max(self.particle_config['particles_per_note_base'], 
+                                      min(self.particle_config['max_particles_per_note'], scaled_particle_count))
+                    
+                    for _ in range(num_particles):
+                        # Spawn particles at random X position across the note width, at bottom Y
+                        px = note_x_start + random.uniform(0, key_width * self.particle_config['spawn_x_spread'])
+                        py = widget_height  # Always spawn at bottom of widget
+                        
+                        # Use configurable initial velocities
+                        vx = random.uniform(self.particle_config['initial_velocity_x_min'], 
+                                          self.particle_config['initial_velocity_x_max']) * widget_scale
+                        vy = random.uniform(self.particle_config['initial_velocity_y_min'], 
+                                          self.particle_config['initial_velocity_y_max']) * widget_scale
+                        
+                        # Use configurable life span
+                        life_variation = random.uniform(0.9, 1.2)
+                        life = random.uniform(self.particle_config['life_min'], 
+                                            self.particle_config['life_max']) * life_variation * (0.8 + 0.4 * widget_scale)
+                        
+                        # Create particle colors with configurable opacity
+                        color_boost = random.randint(40, 100)  # More consistent color boost
+                        opacity = random.randint(int(self.particle_config['initial_opacity_min']), 
+                                               int(self.particle_config['initial_opacity_max']))
+                        particle_color = QColor(
+                            min(255, base_color.red() + color_boost),
+                            min(255, base_color.green() + color_boost),
+                            min(255, base_color.blue() + color_boost),
+                            opacity
+                        )
+                        
+                        # Use configurable particle sizes
+                        size_variation = random.uniform(0.8, 1.2)
+                        base_size = random.uniform(self.particle_config['initial_size_min'], 
+                                                 self.particle_config['initial_size_max']) * size_variation
+                        particle_size = base_size * widget_scale
+                        particle_size = max(0.1, min(5.0, particle_size))  # Reasonable size limits
+                        
+                        # Create particle with configurable turbulence strength and damping
+                        particle = Particle(px, py, particle_color, vx, vy, life, particle_size, 
+                                          self.particle_config['turbulence_strength'],
+                                          self.particle_config['damping_factor'])
+                        self.particles.append(particle)
+                    
+                    # Spawn spark particles if enabled
+                    if self.particle_config['spark_enabled']:
+                        num_sparks = max(1, int(num_particles * self.particle_config['spark_count_ratio']))
+                        
+                        for _ in range(num_sparks):
+                            # Spawn sparks at random X position across the note width, at bottom Y
+                            spark_px = note_x_start + random.uniform(0, key_width * self.particle_config['spawn_x_spread'])
+                            spark_py = widget_height  # Always spawn at bottom of widget
+                            
+                            # Use base particle velocity configuration but multiply by 1.5 for faster sparks
+                            spark_vx = random.uniform(self.particle_config['initial_velocity_x_min'], 
+                                                    self.particle_config['initial_velocity_x_max']) * widget_scale * 1.5
+                            spark_vy = random.uniform(self.particle_config['initial_velocity_y_min'], 
+                                                    self.particle_config['initial_velocity_y_max']) * widget_scale * 1.5
+                            
+                            # Use spark-specific life span
+                            spark_life_variation = random.uniform(0.8, 1.2)
+                            spark_life = random.uniform(self.particle_config['spark_life_min'], 
+                                                       self.particle_config['spark_life_max']) * spark_life_variation
+                            
+                            # Create white spark particles with high opacity
+                            spark_opacity = random.randint(int(self.particle_config['spark_opacity_min']), 
+                                                         int(self.particle_config['spark_opacity_max']))
+                            spark_color = QColor(255, 255, 255, spark_opacity)  # Pure white
+                            
+                            # Use spark-specific small sizes
+                            spark_size_variation = random.uniform(0.8, 1.2)
+                            spark_size = random.uniform(self.particle_config['spark_size_min'], 
+                                                       self.particle_config['spark_size_max']) * spark_size_variation * widget_scale
+                            spark_size = max(0.1, min(2.0, spark_size))  # Clamp spark size
+                            
+                            # Create spark particle with same movement parameters but different visuals
+                            spark_particle = Particle(spark_px, spark_py, spark_color, spark_vx, spark_vy, spark_life, spark_size, 
+                                                     self.particle_config['turbulence_strength'],
+                                                     self.particle_config['damping_factor'])
+                            self.spark_particles.append(spark_particle)
+            
+            self.last_particle_time = current_time
+        except Exception as e:
+            print(f"Error spawning particles: {e}")
+    
+    def _draw_particles(self, painter: QPainter):
+        """Draw all particles"""
+        if not painter.isActive():
+            return
+            
+        painter.setPen(Qt.PenStyle.NoPen)
+        
+        try:
+            for particle in self.particles:
+                # Create radial gradient for particle glow effect - smaller glow radius
+                gradient = QRadialGradient(QPointF(particle.x, particle.y), particle.size * 1.2)
+                
+                # Center is bright and opaque
+                center_color = QColor(particle.color)
+                gradient.setColorAt(0, center_color)
+                
+                # Mid-point is slightly dimmer
+                mid_color = QColor(particle.color)
+                mid_color.setAlpha(int(particle.color.alpha() * 0.6))
+                gradient.setColorAt(0.6, mid_color)
+                
+                # Edge fades to transparent for glow effect
+                edge_color = QColor(particle.color)
+                edge_color.setAlpha(0)
+                gradient.setColorAt(1, edge_color)
+                
+                painter.setBrush(QBrush(gradient))
+                
+                # Draw particle as a glowing circle - size now changes over lifespan
+                particle_rect = QRectF(
+                    particle.x - particle.size, 
+                    particle.y - particle.size, 
+                    particle.size * 2, 
+                    particle.size * 2
+                )
+                painter.drawEllipse(particle_rect)
+        except Exception as e:
+            print(f"Error drawing particles: {e}")
+    
+    def _draw_spark_particles(self, painter: QPainter):
+        """Draw spark particles with a more intense, star-like appearance"""
+        if not painter.isActive():
+            return
+            
+        painter.setPen(Qt.PenStyle.NoPen)
+        
+        try:
+            for spark in self.spark_particles:
+                # Create a bright white core with sharp falloff for spark effect
+                gradient = QRadialGradient(QPointF(spark.x, spark.y), spark.size * 0.8)
+                
+                # Very bright white center
+                center_color = QColor(spark.color)
+                gradient.setColorAt(0, center_color)
+                
+                # Sharp falloff to create spark-like appearance
+                mid_color = QColor(spark.color)
+                mid_color.setAlpha(int(spark.color.alpha() * 0.3))
+                gradient.setColorAt(0.4, mid_color)
+                
+                # Quick fade to transparent
+                edge_color = QColor(spark.color)
+                edge_color.setAlpha(0)
+                gradient.setColorAt(1, edge_color)
+                
+                painter.setBrush(QBrush(gradient))
+                
+                # Draw spark as a small bright circle
+                spark_rect = QRectF(
+                    spark.x - spark.size, 
+                    spark.y - spark.size, 
+                    spark.size * 2, 
+                    spark.size * 2
+                )
+                painter.drawEllipse(spark_rect)
+                
+                # Add a cross-shaped highlight for extra sparkle effect
+                if spark.size > 0.3:  # Only for visible sparks
+                    painter.setPen(QPen(QColor(255, 255, 255, int(spark.color.alpha() * 0.8)), max(0.5, spark.size * 0.3)))
+                    
+                    # Draw cross lines for sparkle effect
+                    cross_size = spark.size * 1.5
+                    painter.drawLine(QPointF(spark.x - cross_size, spark.y), QPointF(spark.x + cross_size, spark.y))
+                    painter.drawLine(QPointF(spark.x, spark.y - cross_size), QPointF(spark.x, spark.y + cross_size))
+                    
+                    painter.setPen(Qt.PenStyle.NoPen)  # Reset pen
+        except Exception as e:
+            print(f"Error drawing spark particles: {e}")
+    
+    def _draw_note_glow(self, painter: QPainter, rect: QRectF, color: QColor, intensity: float = 1.0):
+        """Draw a glow effect around a note rectangle"""
+        # Save current state
+        painter.save()
+        
+        # Create glow by drawing multiple layers with increasing size and decreasing opacity
+        glow_layers = 5
+        max_glow_size = 8 * intensity
+        
+        for i in range(glow_layers):
+            layer_ratio = (i + 1) / glow_layers
+            glow_size = max_glow_size * layer_ratio
+            opacity = int((1.0 - layer_ratio) * 60 * intensity)  # Fade out as we go outward
+            
+            # Create glow color with reduced opacity
+            glow_color = QColor(color)
+            glow_color.setAlpha(opacity)
+            
+            # Expand rect for glow
+            glow_rect = rect.adjusted(-glow_size, -glow_size, glow_size, glow_size)
+            
+            # Draw glow layer
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(glow_color))
+            painter.drawRoundedRect(glow_rect, 3 + glow_size/2, 3 + glow_size/2)
+        
+        # Restore state
+        painter.restore()
+    
     def set_scroll_speed(self, speed: float):
         """Set the scroll speed for the piano roll"""
         self.SCROLL_SPEED = max(10, min(500, speed))  # Clamp between 10 and 500 pixels per second
+    
+    def update_particle_config(self, **kwargs):
+        """Update particle configuration parameters
+        
+        Available parameters:
+        - spawn_rate: seconds between particle spawns per active note
+        - initial_velocity_x_min/max: X velocity range
+        - initial_velocity_y_min/max: Y velocity range (negative = upward)
+        - initial_size_min/max: particle size range
+        - initial_opacity_min/max: opacity range (0-255)
+        - turbulence_strength: turbulence multiplier (0.0-2.0+)
+        - damping_factor: velocity damping per frame (0.0-1.0, lower = more damping)
+        - life_min/max: particle lifespan range in seconds
+        - spawn_x_spread: horizontal spread factor (0.0-1.0)
+        - particles_per_note_base: base number of particles per note
+        - particles_per_velocity: velocity divisor for extra particles
+        - max_particles_per_note: maximum particles per note per spawn
+        - spark_enabled: enable/disable spark particles
+        - spark_size_min/max: spark particle size range
+        - spark_opacity_min/max: spark opacity range (0-255)
+        - spark_life_min/max: spark lifespan range in seconds
+        - spark_count_ratio: ratio of sparks to regular particles
+        """
+        for key, value in kwargs.items():
+            if key in self.particle_config:
+                self.particle_config[key] = value
+            else:
+                print(f"Warning: Unknown particle config parameter: {key}")
+                print(f"Available parameters: {list(self.particle_config.keys())}")
+    
+    def get_particle_config(self):
+        """Get current particle configuration"""
+        return self.particle_config.copy()

@@ -61,6 +61,7 @@ class MainWindow(QMainWindow):
         self.midi_delay_input = None
         self.play_pause_button = None
         self.clear_button = None
+        self.particles_button = None
         self.mute_button = None
         self.view_toggle_button = None
         self.spectrum_analyzer = None
@@ -142,6 +143,10 @@ class MainWindow(QMainWindow):
                 # Connect MIDI signals
                 self.midi_manager.note_on.connect(self.piano_roll.add_note_on)
                 self.midi_manager.note_off.connect(self.piano_roll.add_note_off)
+                
+                # Apply saved scroll speed to the newly created piano roll
+                saved_speed = self.settings_manager.get_scroll_speed()
+                self.piano_roll.set_scroll_speed(float(saved_speed))
                 
             except Exception as e:
                 print(f"Failed to initialize piano roll: {e}")
@@ -376,6 +381,29 @@ class MainWindow(QMainWindow):
             }
         """)
         midi_row.addWidget(self.clear_button)
+
+        # Particles configuration button
+        self.particles_button = QPushButton("Particles")
+        self.particles_button.setFixedSize(70, 30)
+        self.particles_button.setToolTip("Configure particle effects")
+        self.particles_button.setStyleSheet("""
+            QPushButton {
+                background-color: #2d2d2d;
+                border: 1px solid #555;
+                border-radius: 4px;
+                color: #ffffff;
+                font-size: 11px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #2d4a2d;
+                border-color: #777;
+            }
+            QPushButton:pressed {
+                background-color: #1a1a1a;
+            }
+        """)
+        midi_row.addWidget(self.particles_button)
         
         # View toggle button
         self.view_toggle_button = QPushButton("Piano Roll")
@@ -424,6 +452,7 @@ class MainWindow(QMainWindow):
         self.view_toggle_button.clicked.connect(self.toggle_visualization)
         self.play_pause_button.clicked.connect(self.toggle_piano_roll_playback)
         self.clear_button.clicked.connect(self.clear_piano_roll)
+        self.particles_button.clicked.connect(self.open_particle_config)
     
     def on_input_device_changed(self, display_name: str):
         """Handle input device selection change"""
@@ -530,6 +559,21 @@ class MainWindow(QMainWindow):
         """Clear all notes from the piano roll"""
         if self.piano_roll:
             self.piano_roll.clear_notes()
+    
+    def open_particle_config(self):
+        """Open the particle configuration dialog"""
+        if not self.piano_roll:
+            return
+        
+        try:
+            # Import the particle config dialog
+            from .particle_config_dialog import ParticleConfigDialog
+        except ImportError:
+            from ui.particle_config_dialog import ParticleConfigDialog
+        
+        # Create and show the dialog
+        dialog = ParticleConfigDialog(self.piano_roll, self)
+        dialog.show()
     
     def try_start_streaming(self):
         """Try to start streaming only if both input and output devices are properly selected"""
@@ -685,6 +729,10 @@ class MainWindow(QMainWindow):
         }
         speed_text = speed_text_map.get(saved_speed, "Normal")
         self.scroll_speed_input.setCurrentText(speed_text)
+        
+        # Apply the saved scroll speed to the piano roll widget
+        if self.piano_roll:
+            self.piano_roll.set_scroll_speed(float(saved_speed))
         
         # Load MIDI delay preference
         saved_delay = self.settings_manager.get_midi_delay()
