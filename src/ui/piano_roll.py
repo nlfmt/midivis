@@ -749,6 +749,10 @@ class PianoRollWidget(QWidget):
     def _spawn_particles_for_active_notes(self, current_time: float, widget_width: int, widget_height: int):
         """Spawn particles for active notes"""
         try:
+            if not self.particle_config['enabled']:
+                return  # Skip spawning particles if globally disabled
+
+            current_time = time.time()
             if current_time - self.last_particle_time < self.particle_config['spawn_rate']:
                 return
 

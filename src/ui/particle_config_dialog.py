@@ -663,6 +663,10 @@ class PianoRollConfigDialog(QDialog):
         # For now, we don't have a global enable/disable, but we can disable spawning
         # by setting spawn rate to a very high value or stopping particle updates
         enabled = state == Qt.CheckState.Checked.value
+        
+        # Update the 'enabled' flag in the particle_config dictionary
+        self.piano_roll.particle_config['enabled'] = enabled
+
         if not enabled:
             # Clear existing particles
             self.piano_roll.particles.clear()
