@@ -168,6 +168,7 @@ class PianoRollWidget(QWidget):
         
         # Particle system configuration - centralized parameters for easy tweaking
         self.particle_config = {
+            'enabled': True,                       # global switch for the particle system
             'spawn_rate': 0.01,                    # seconds between particle spawns per active note
             'initial_velocity_x_min': -5.0,       # minimum initial X velocity
             'initial_velocity_x_max': 5.0,        # maximum initial X velocity
