@@ -1,80 +1,128 @@
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                                QSlider, QSpinBox, QDoubleSpinBox, QCheckBox, 
                                QPushButton, QGroupBox, QGridLayout, QFrame, QScrollArea, QWidget)
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
+from PySide6.QtCore import Qt, QSize, Signal
+from PySide6.QtGui import QFont, QColor, QPainter, QBrush, QPen
+from vcolorpicker import getColor
 
 
-class ParticleConfigDialog(QDialog):
-    """Dialog for configuring particle system parameters"""
+class ColorDisplay(QWidget):
+    """Clickable widget to display a color as a rounded rectangle"""
+    
+    # Signal emitted when the color display is clicked
+    clicked = Signal()
+    
+    def __init__(self, color=(255, 255, 255), parent=None):
+        super().__init__(parent)
+        self.color = QColor(*color)
+        self.setFixedSize(120, 35)
+        self.setToolTip(f"RGB: {color[0]}, {color[1]}, {color[2]}\nClick to change color")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+    
+    def setColor(self, color):
+        """Set the color from RGB tuple"""
+        if isinstance(color, tuple) and len(color) >= 3:
+            self.color = QColor(color[0], color[1], color[2])
+            self.setToolTip(f"RGB: {color[0]}, {color[1]}, {color[2]}\nClick to change color")
+            self.update()
+    
+    def getColor(self):
+        """Get the color as RGB tuple"""
+        return (self.color.red(), self.color.green(), self.color.blue())
+    
+    def mousePressEvent(self, event):
+        """Handle mouse clicks"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
+    
+    def paintEvent(self, event):
+        """Paint the color rectangle with improved antialiasing"""
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+        
+        # Draw rounded rectangle with the color
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(self.color))
+        painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 8, 8)
+        
+        # Draw a subtle border with antialiasing
+        painter.setPen(QPen(QColor(128, 128, 128), 1.0))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 8, 8)
+
+
+class PianoRollConfigDialog(QDialog):
+    """Dialog for configuring piano roll parameters including particles and gradients"""
     
     def __init__(self, piano_roll, parent=None):
         super().__init__(parent)
         self.piano_roll = piano_roll
-        self.setWindowTitle("Particle Configuration")
+        self.setWindowTitle("Piano Roll Configuration")
         self.setMinimumSize(450, 500)
-        self.resize(500, 600)
+        self.resize(500, 650)
         
         # Store original config for reset functionality
         self.original_config = piano_roll.get_particle_config()
         
-        # Set custom stylesheet for the dialog
+        # Set custom stylesheet for the dialog - make it specific to avoid affecting child dialogs
         self.setStyleSheet("""
-            QDialog {
+            PianoRollConfigDialog {
                 background-color: #2b2b2b;  /* Dark gray to match main UI and device dialog */
                 color: #ffffff;
             }
             
-            QScrollArea {
+            PianoRollConfigDialog QScrollArea {
                 border: none;
                 background-color: transparent;
             }
             
-            QScrollBar:vertical {
+            PianoRollConfigDialog QScrollBar:vertical {
                 background-color: #2a2a2a;
                 width: 12px;
                 border-radius: 6px;
                 margin: 0;
             }
             
-            QScrollBar::handle:vertical {
+            PianoRollConfigDialog QScrollBar::handle:vertical {
                 background-color: #555555;
                 border-radius: 6px;
                 min-height: 20px;
                 margin: 2px;
             }
             
-            QScrollBar::handle:vertical:hover {
+            PianoRollConfigDialog QScrollBar::handle:vertical:hover {
                 background-color: #666666;
             }
             
-            QScrollBar::handle:vertical:pressed {
+            PianoRollConfigDialog QScrollBar::handle:vertical:pressed {
                 background-color: #777777;
             }
             
-            QScrollBar::add-line:vertical,
-            QScrollBar::sub-line:vertical {
+            PianoRollConfigDialog QScrollBar::add-line:vertical,
+            PianoRollConfigDialog QScrollBar::sub-line:vertical {
                 height: 0px;
                 background: none;
             }
             
-            QScrollBar::add-page:vertical,
-            QScrollBar::sub-page:vertical {
+            PianoRollConfigDialog QScrollBar::add-page:vertical,
+            PianoRollConfigDialog QScrollBar::sub-page:vertical {
                 background: none;
             }
             
-            QSpinBox::up-button,
-            QSpinBox::down-button,
-            QDoubleSpinBox::up-button,
-            QDoubleSpinBox::down-button {
+            PianoRollConfigDialog QSpinBox::up-button,
+            PianoRollConfigDialog QSpinBox::down-button,
+            PianoRollConfigDialog QDoubleSpinBox::up-button,
+            PianoRollConfigDialog QDoubleSpinBox::down-button {
                 width: 0px;
                 height: 0px;
                 border: none;
                 background: none;
             }
             
-            QSpinBox,
-            QDoubleSpinBox {
+            PianoRollConfigDialog QSpinBox,
+            PianoRollConfigDialog QDoubleSpinBox {
                 background-color: #404040;
                 border: 1px solid #555555;
                 border-radius: 3px;
@@ -85,12 +133,12 @@ class ParticleConfigDialog(QDialog):
                 font-size: 9pt;
             }
             
-            QSpinBox:focus,
-            QDoubleSpinBox:focus {
+            PianoRollConfigDialog QSpinBox:focus,
+            PianoRollConfigDialog QDoubleSpinBox:focus {
                 border-color: #0078d4;
             }
             
-            QLabel {
+            PianoRollConfigDialog QLabel {
                 border: none;
                 background: none;
                 color: #ffffff;
@@ -99,7 +147,7 @@ class ParticleConfigDialog(QDialog):
                 margin: 1px;
             }
             
-            QGroupBox {
+            PianoRollConfigDialog QGroupBox {
                 font-weight: bold;
                 border: 1px solid #555555;
                 border-radius: 6px;
@@ -108,7 +156,7 @@ class ParticleConfigDialog(QDialog):
                 margin-bottom: 4px;
             }
             
-            QGroupBox::title {
+            PianoRollConfigDialog QGroupBox::title {
                 subcontrol-origin: margin;
                 left: 8px;
                 padding: 0 4px 0 4px;
@@ -116,7 +164,7 @@ class ParticleConfigDialog(QDialog):
                 font-size: 10pt;
             }
             
-            QSlider::groove:horizontal {
+            PianoRollConfigDialog QSlider::groove:horizontal {
                 border: 1px solid #555555;
                 height: 6px;
                 background: #404040;
@@ -124,7 +172,7 @@ class ParticleConfigDialog(QDialog):
                 margin: 2px 0;
             }
             
-            QSlider::handle:horizontal {
+            PianoRollConfigDialog QSlider::handle:horizontal {
                 background: #0078d4;
                 border: 1px solid #0078d4;
                 width: 14px;
@@ -132,35 +180,35 @@ class ParticleConfigDialog(QDialog):
                 border-radius: 7px;
             }
             
-            QSlider::handle:horizontal:hover {
+            PianoRollConfigDialog QSlider::handle:horizontal:hover {
                 background: #106ebe;
             }
             
-            QCheckBox {
+            PianoRollConfigDialog QCheckBox {
                 color: #ffffff;
                 font-size: 9pt;
                 padding: 2px;
                 margin: 2px;
             }
             
-            QCheckBox::indicator {
+            PianoRollConfigDialog QCheckBox::indicator {
                 width: 16px;
                 height: 16px;
             }
             
-            QCheckBox::indicator:unchecked {
+            PianoRollConfigDialog QCheckBox::indicator:unchecked {
                 background-color: #404040;
                 border: 1px solid #555555;
                 border-radius: 3px;
             }
             
-            QCheckBox::indicator:checked {
+            PianoRollConfigDialog QCheckBox::indicator:checked {
                 background-color: #0078d4;
                 border: 1px solid #0078d4;
                 border-radius: 3px;
             }
             
-            QPushButton {
+            PianoRollConfigDialog QPushButton {
                 background-color: #0078d4;
                 border: none;
                 border-radius: 4px;
@@ -171,19 +219,19 @@ class ParticleConfigDialog(QDialog):
                 min-height: 16px;
             }
             
-            QPushButton:hover {
+            PianoRollConfigDialog QPushButton:hover {
                 background-color: #106ebe;
             }
             
-            QPushButton:pressed {
+            PianoRollConfigDialog QPushButton:pressed {
                 background-color: #005a9e;
             }
             
-            QPushButton#reset_button {
+            PianoRollConfigDialog QPushButton#reset_button {
                 background-color: #7d2d2d;
             }
             
-            QPushButton#reset_button:hover {
+            PianoRollConfigDialog QPushButton#reset_button:hover {
                 background-color: #9d3d3d;
             }
         """)
@@ -385,9 +433,10 @@ class ParticleConfigDialog(QDialog):
         gradient_layout.addWidget(self.gradient_enabled_cb, row, 0, 1, 3)
         row += 1
         
-        # Color preset buttons
+        # Color preset buttons with padding
         gradient_layout.addWidget(QLabel("Presets:"), row, 0)
         preset_layout = QHBoxLayout()
+        preset_layout.setSpacing(8)  # Add padding between preset buttons
         
         self.preset_fire_button = QPushButton("Fire")
         self.preset_fire_button.setFixedHeight(25)
@@ -404,70 +453,77 @@ class ParticleConfigDialog(QDialog):
         self.preset_sunset_button.clicked.connect(lambda: self.apply_gradient_preset("sunset"))
         preset_layout.addWidget(self.preset_sunset_button)
         
-        self.preset_rainbow_button = QPushButton("Rainbow")
-        self.preset_rainbow_button.setFixedHeight(25)
-        self.preset_rainbow_button.clicked.connect(lambda: self.apply_gradient_preset("rainbow"))
-        preset_layout.addWidget(self.preset_rainbow_button)
+        self.preset_forest_button = QPushButton("Forest")
+        self.preset_forest_button.setFixedHeight(25)
+        self.preset_forest_button.clicked.connect(lambda: self.apply_gradient_preset("forest"))
+        preset_layout.addWidget(self.preset_forest_button)
+        
+        # Second row of presets
+        preset_layout_2 = QHBoxLayout()
+        preset_layout_2.setSpacing(8)  # Add padding between preset buttons
+        
+        self.preset_emerald_button = QPushButton("Emerald")
+        self.preset_emerald_button.setFixedHeight(25)
+        self.preset_emerald_button.clicked.connect(lambda: self.apply_gradient_preset("emerald"))
+        preset_layout_2.addWidget(self.preset_emerald_button)
+        
+        self.preset_gold_button = QPushButton("Gold")
+        self.preset_gold_button.setFixedHeight(25)
+        self.preset_gold_button.clicked.connect(lambda: self.apply_gradient_preset("gold"))
+        preset_layout_2.addWidget(self.preset_gold_button)
+        
+        self.preset_citrus_button = QPushButton("Citrus")
+        self.preset_citrus_button.setFixedHeight(25)
+        self.preset_citrus_button.clicked.connect(lambda: self.apply_gradient_preset("citrus"))
+        preset_layout_2.addWidget(self.preset_citrus_button)
+        
+        self.preset_purple_button = QPushButton("Purple")
+        self.preset_purple_button.setFixedHeight(25)
+        self.preset_purple_button.clicked.connect(lambda: self.apply_gradient_preset("purple"))
+        preset_layout_2.addWidget(self.preset_purple_button)
         
         gradient_layout.addLayout(preset_layout, row, 1, 1, 2)
         row += 1
-        
-        # Individual color controls (simplified - showing 3 main colors)
-        gradient_layout.addWidget(QLabel("Bottom Color (R,G,B):"), row, 0)
-        self.bottom_color_r = QSpinBox()
-        self.bottom_color_r.setRange(0, 255)
-        self.bottom_color_r.valueChanged.connect(self.on_gradient_color_changed)
-        self.bottom_color_g = QSpinBox()
-        self.bottom_color_g.setRange(0, 255)
-        self.bottom_color_g.valueChanged.connect(self.on_gradient_color_changed)
-        self.bottom_color_b = QSpinBox()
-        self.bottom_color_b.setRange(0, 255)
-        self.bottom_color_b.valueChanged.connect(self.on_gradient_color_changed)
-        
-        bottom_color_layout = QHBoxLayout()
-        bottom_color_layout.addWidget(self.bottom_color_r)
-        bottom_color_layout.addWidget(self.bottom_color_g)
-        bottom_color_layout.addWidget(self.bottom_color_b)
-        gradient_layout.addLayout(bottom_color_layout, row, 1, 1, 2)
+        gradient_layout.addLayout(preset_layout_2, row, 1, 1, 2)
         row += 1
         
-        gradient_layout.addWidget(QLabel("Middle Color (R,G,B):"), row, 0)
-        self.middle_color_r = QSpinBox()
-        self.middle_color_r.setRange(0, 255)
-        self.middle_color_r.valueChanged.connect(self.on_gradient_color_changed)
-        self.middle_color_g = QSpinBox()
-        self.middle_color_g.setRange(0, 255)
-        self.middle_color_g.valueChanged.connect(self.on_gradient_color_changed)
-        self.middle_color_b = QSpinBox()
-        self.middle_color_b.setRange(0, 255)
-        self.middle_color_b.valueChanged.connect(self.on_gradient_color_changed)
-        
-        middle_color_layout = QHBoxLayout()
-        middle_color_layout.addWidget(self.middle_color_r)
-        middle_color_layout.addWidget(self.middle_color_g)
-        middle_color_layout.addWidget(self.middle_color_b)
-        gradient_layout.addLayout(middle_color_layout, row, 1, 1, 2)
+        # Color picker controls - reordered to top, middle, bottom
+        gradient_layout.addWidget(QLabel("Top Color:"), row, 0)
+        self.top_color_display = ColorDisplay((255, 50, 50))
+        self.top_color_display.clicked.connect(self.pick_top_color)
+        gradient_layout.addWidget(self.top_color_display, row, 1)
         row += 1
         
-        gradient_layout.addWidget(QLabel("Top Color (R,G,B):"), row, 0)
-        self.top_color_r = QSpinBox()
-        self.top_color_r.setRange(0, 255)
-        self.top_color_r.valueChanged.connect(self.on_gradient_color_changed)
-        self.top_color_g = QSpinBox()
-        self.top_color_g.setRange(0, 255)
-        self.top_color_g.valueChanged.connect(self.on_gradient_color_changed)
-        self.top_color_b = QSpinBox()
-        self.top_color_b.setRange(0, 255)
-        self.top_color_b.valueChanged.connect(self.on_gradient_color_changed)
+        gradient_layout.addWidget(QLabel("Middle Color:"), row, 0)
+        self.middle_color_display = ColorDisplay((255, 150, 0))
+        self.middle_color_display.clicked.connect(self.pick_middle_color)
+        gradient_layout.addWidget(self.middle_color_display, row, 1)
+        row += 1
         
-        top_color_layout = QHBoxLayout()
-        top_color_layout.addWidget(self.top_color_r)
-        top_color_layout.addWidget(self.top_color_g)
-        top_color_layout.addWidget(self.top_color_b)
-        gradient_layout.addLayout(top_color_layout, row, 1, 1, 2)
+        gradient_layout.addWidget(QLabel("Bottom Color:"), row, 0)
+        self.bottom_color_display = ColorDisplay((255, 100, 150))
+        self.bottom_color_display.clicked.connect(self.pick_bottom_color)
+        gradient_layout.addWidget(self.bottom_color_display, row, 1)
         row += 1
         
         layout.addWidget(gradient_group)
+        
+        # Visual Settings Group
+        visual_group = QGroupBox("Visual Settings")
+        visual_layout = QGridLayout(visual_group)
+        visual_layout.setContentsMargins(8, 12, 8, 8)
+        visual_layout.setSpacing(4)
+        visual_layout.setVerticalSpacing(6)
+        
+        row = 0
+        
+        # Note labels checkbox
+        self.show_note_labels_cb = QCheckBox("Show Note Labels (C4, D4, etc.)")
+        self.show_note_labels_cb.stateChanged.connect(self.on_note_labels_changed)
+        visual_layout.addWidget(self.show_note_labels_cb, row, 0, 1, 3)
+        row += 1
+        
+        layout.addWidget(visual_group)
         
         # Spark Particles Group
         spark_group = QGroupBox("Spark Particles")
@@ -625,15 +681,44 @@ class ParticleConfigDialog(QDialog):
         enabled = state == Qt.CheckState.Checked.value
         self.piano_roll.update_gradient_config(enabled=enabled)
     
+    def on_note_labels_changed(self, state):
+        """Handle enable/disable of note labels"""
+        enabled = state == Qt.CheckState.Checked.value
+        self.piano_roll.update_visual_config(show_note_labels=enabled)
+    
+    def pick_bottom_color(self):
+        """Open color picker for bottom color"""
+        current_color = self.bottom_color_display.getColor()
+        new_color = getColor(current_color)
+        if new_color:  # getColor returns None if cancelled
+            self.bottom_color_display.setColor(new_color)
+            self.on_gradient_color_changed()
+    
+    def pick_middle_color(self):
+        """Open color picker for middle color"""
+        current_color = self.middle_color_display.getColor()
+        new_color = getColor(current_color)
+        if new_color:  # getColor returns None if cancelled
+            self.middle_color_display.setColor(new_color)
+            self.on_gradient_color_changed()
+    
+    def pick_top_color(self):
+        """Open color picker for top color"""
+        current_color = self.top_color_display.getColor()
+        new_color = getColor(current_color)
+        if new_color:  # getColor returns None if cancelled
+            self.top_color_display.setColor(new_color)
+            self.on_gradient_color_changed()
+
     def on_gradient_color_changed(self):
-        """Handle gradient color changes"""
-        # Get current color values
-        bottom_color = (self.bottom_color_r.value(), self.bottom_color_g.value(), self.bottom_color_b.value())
-        middle_color = (self.middle_color_r.value(), self.middle_color_g.value(), self.middle_color_b.value())
-        top_color = (self.top_color_r.value(), self.top_color_g.value(), self.top_color_b.value())
+        """Handle gradient color changes from color displays"""
+        # Get current color values from color displays - now in top to bottom order
+        top_color = self.top_color_display.getColor()
+        middle_color = self.middle_color_display.getColor()
+        bottom_color = self.bottom_color_display.getColor()
         
-        # Update the gradient configuration
-        colors = [bottom_color, middle_color, top_color]
+        # Update the gradient configuration - colors should be in top to bottom order
+        colors = [top_color, middle_color, bottom_color]
         positions = [0.0, 0.5, 1.0]
         self.piano_roll.set_gradient_colors(colors, positions)
     
@@ -641,41 +726,53 @@ class ParticleConfigDialog(QDialog):
         """Apply a gradient color preset"""
         presets = {
             "fire": {
-                "colors": [(255, 100, 150), (255, 150, 0), (255, 50, 50)],  # Pink to Orange to Red
+                "colors": [(255, 50, 50), (255, 150, 0), (255, 100, 150)],  # Red to Orange to Pink
                 "positions": [0.0, 0.5, 1.0]
             },
             "ocean": {
-                "colors": [(100, 200, 255), (0, 150, 255), (0, 100, 200)],  # Light Blue to Blue to Dark Blue
+                "colors": [(0, 100, 200), (0, 150, 255), (100, 200, 255)],  # Dark Blue to Blue to Light Blue
                 "positions": [0.0, 0.5, 1.0]
             },
             "sunset": {
-                "colors": [(255, 200, 100), (255, 120, 50), (150, 50, 100)],  # Yellow to Orange to Purple
+                "colors": [(150, 50, 100), (255, 120, 50), (255, 200, 100)],  # Purple to Orange to Yellow
                 "positions": [0.0, 0.5, 1.0]
             },
-            "rainbow": {
-                "colors": [(255, 0, 0), (255, 165, 0), (0, 255, 0), (0, 0, 255)],  # Red to Orange to Green to Blue
-                "positions": [0.0, 0.33, 0.66, 1.0]
+            "forest": {
+                "colors": [(0, 80, 0), (50, 150, 50), (100, 255, 100)],  # Dark Green to Green to Light Green
+                "positions": [0.0, 0.5, 1.0]
+            },
+            "emerald": {
+                "colors": [(0, 100, 80), (0, 200, 150), (100, 255, 200)],  # Dark Teal to Emerald to Light Teal
+                "positions": [0.0, 0.5, 1.0]
+            },
+            "gold": {
+                "colors": [(150, 100, 0), (255, 200, 50), (255, 255, 150)],  # Dark Gold to Gold to Light Yellow
+                "positions": [0.0, 0.5, 1.0]
+            },
+            "citrus": {
+                "colors": [(200, 150, 0), (255, 220, 0), (255, 255, 100)],  # Orange-Yellow to Yellow to Light Yellow
+                "positions": [0.0, 0.5, 1.0]
+            },
+            "purple": {
+                "colors": [(80, 0, 120), (150, 50, 200), (200, 100, 255)],  # Dark Purple to Purple to Light Purple
+                "positions": [0.0, 0.5, 1.0]
             }
         }
         
         if preset_name in presets:
             preset = presets[preset_name]
             self.piano_roll.set_gradient_colors(preset["colors"], preset["positions"])
-            # Update UI to reflect the preset (only update the 3-color simplified view)
+            # Update UI to reflect the preset - now in top, middle, bottom order
             if len(preset["colors"]) >= 3:
-                # Bottom color
-                self.bottom_color_r.setValue(preset["colors"][0][0])
-                self.bottom_color_g.setValue(preset["colors"][0][1])
-                self.bottom_color_b.setValue(preset["colors"][0][2])
-                # Middle color (use middle of available colors)
+                # Top color (first in the preset)
+                self.top_color_display.setColor(preset["colors"][0])
+                
+                # Middle color (middle of available colors)
                 mid_idx = len(preset["colors"]) // 2
-                self.middle_color_r.setValue(preset["colors"][mid_idx][0])
-                self.middle_color_g.setValue(preset["colors"][mid_idx][1])
-                self.middle_color_b.setValue(preset["colors"][mid_idx][2])
-                # Top color
-                self.top_color_r.setValue(preset["colors"][-1][0])
-                self.top_color_g.setValue(preset["colors"][-1][1])
-                self.top_color_b.setValue(preset["colors"][-1][2])
+                self.middle_color_display.setColor(preset["colors"][mid_idx])
+                
+                # Bottom color (last in the preset)
+                self.bottom_color_display.setColor(preset["colors"][-1])
     
     def load_current_values(self):
         """Load current particle configuration values into the UI"""
@@ -752,21 +849,17 @@ class ParticleConfigDialog(QDialog):
         gradient_config = self.piano_roll.get_gradient_config()
         self.gradient_enabled_cb.setChecked(gradient_config['enabled'])
         
-        # Load current gradient colors (simplified 3-color view)
+        # Load current gradient colors - now in top, middle, bottom order
         colors = gradient_config['colors']
         if len(colors) >= 3:
-            # Bottom color
-            self.bottom_color_r.setValue(colors[0][0])
-            self.bottom_color_g.setValue(colors[0][1])
-            self.bottom_color_b.setValue(colors[0][2])
-            # Middle color
-            self.middle_color_r.setValue(colors[1][0])
-            self.middle_color_g.setValue(colors[1][1])
-            self.middle_color_b.setValue(colors[1][2])
-            # Top color
-            self.top_color_r.setValue(colors[2][0])
-            self.top_color_g.setValue(colors[2][1])
-            self.top_color_b.setValue(colors[2][2])
+            # Set color displays to current gradient colors in the new order
+            self.top_color_display.setColor(colors[0])      # First color = top
+            self.middle_color_display.setColor(colors[1])   # Second color = middle  
+            self.bottom_color_display.setColor(colors[2])   # Third color = bottom
+        
+        # Load visual configuration values
+        visual_config = self.piano_roll.get_visual_config()
+        self.show_note_labels_cb.setChecked(visual_config.get('show_note_labels', True))
     
     def reset_to_defaults(self):
         """Reset all particle parameters to their default values"""
@@ -801,6 +894,9 @@ class ParticleConfigDialog(QDialog):
         
         # Apply defaults to piano roll
         self.piano_roll.update_particle_config(**defaults)
+        
+        # Reset visual config to defaults
+        self.piano_roll.update_visual_config(show_note_labels=True)
         
         # Update UI to reflect defaults
         self.load_current_values()

@@ -167,11 +167,16 @@ class PianoRollWidget(QWidget):
         self.gradient_config = {
             'enabled': True,  # Enable gradient coloring
             'colors': [
-                (255, 100, 150),  # Pink (bottom of widget)
-                (255, 150, 0),    # Orange (middle)
                 (255, 50, 50),    # Red (top of widget)
+                (255, 150, 0),    # Orange (middle)
+                (255, 100, 150),  # Pink (bottom of widget)
             ],
-            'positions': [0.0, 0.5, 1.0],  # Relative positions (0=bottom, 1=top)
+            'positions': [0.0, 0.5, 1.0],  # Relative positions (0=top, 1=bottom)
+        }
+        
+        # Visual settings configuration
+        self.visual_config = {
+            'show_note_labels': True,  # Show note labels (C4, D4, etc.) inside notes
         }
         
         # Setup timer for animation
@@ -230,9 +235,9 @@ class PianoRollWidget(QWidget):
             # Fallback to a default color if gradient is disabled
             return QColor(100, 170, 255)
         
-        # Normalize position to 0.0 (bottom) to 1.0 (top)
-        # Since we want the gradient to go from bottom to top
-        normalized_pos = 1.0 - (y_position / widget_height)
+        # Normalize position to 0.0 (top) to 1.0 (bottom)
+        # Now the gradient colors are ordered from top to bottom
+        normalized_pos = y_position / widget_height
         normalized_pos = max(0.0, min(1.0, normalized_pos))
         
         colors = self.gradient_config['colors']
@@ -366,9 +371,9 @@ class PianoRollWidget(QWidget):
             # Clear the entire widget with transparent background first
             painter.fillRect(self.rect(), QColor(0, 0, 0, 0))
             
-            # Draw rounded background
+            # Draw rounded background - much darker for better effect visibility
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QBrush(QColor(20, 20, 20)))
+            painter.setBrush(QBrush(QColor(8, 8, 8)))
             painter.drawRoundedRect(QRectF(self.rect()), 8, 8)
             
             # Create rounded rectangle path for clipping content
@@ -390,7 +395,7 @@ class PianoRollWidget(QWidget):
                 
                 if not self.is_black_key(midi_note):
                     # Draw white key - much darker and more subtle
-                    painter.setBrush(QBrush(QColor(25, 25, 25)))
+                    painter.setBrush(QBrush(QColor(8,8,8)))
                     painter.drawRect(QRectF(x, 0, key_width, widget_height))
             
             # Draw black keys (overlay)
@@ -400,11 +405,11 @@ class PianoRollWidget(QWidget):
                 
                 if self.is_black_key(midi_note):
                     # Draw black key - slightly darker than background
-                    painter.setBrush(QBrush(QColor(18, 18, 18)))
+                    painter.setBrush(QBrush(QColor(6, 6, 6)))
                     painter.drawRect(QRectF(x, 0, key_width, widget_height))
             
             # Draw octave separators for C notes - much more subtle
-            painter.setPen(QPen(QColor(35, 35, 35)))
+            painter.setPen(QPen(QColor(20, 20, 20)))
             for i in range(self.NUM_KEYS):
                 midi_note = i + self.LOWEST_NOTE
                 note_in_octave = midi_note % 12
@@ -471,9 +476,9 @@ class PianoRollWidget(QWidget):
         
         # Make it brighter for active notes
         color = QColor(
-            min(255, base_color.red() + 50),    # Extra bright for active notes
-            min(255, base_color.green() + 50),
-            min(255, base_color.blue() + 50),
+            min(255, base_color.red() + 30),    # Reduced brightness boost (was +50)
+            min(255, base_color.green() + 30),  # Same brightness as completed notes
+            min(255, base_color.blue() + 30),
             220  # Slightly more opaque for active notes
         )
         
@@ -482,11 +487,15 @@ class PianoRollWidget(QWidget):
         x_center = x + (key_width / 2)
         rect = QRectF(x_center - (rect_width / 2), y_top, rect_width, rect_height)
         
-        # Draw glow effect for active notes
-        self._draw_note_glow(painter, rect, color, intensity=1.5)
+        # Draw glow effect for active notes with stronger intensity
+        self._draw_note_glow(painter, rect, color, intensity=1.5, widget_height=widget_height)
         
-        # Draw with a white border for active notes
-        painter.setPen(QPen(Qt.GlobalColor.white, 1))  # White border, 1 pixel width
+        # Draw a big bottom glow for active notes where they intersect with the bottom
+        if y_bottom >= widget_height - 5:  # If note reaches near the bottom
+            self._draw_bottom_glow(painter, rect, color, widget_height)
+        
+        # No border for active notes - remove the white outline
+        painter.setPen(Qt.PenStyle.NoPen)
         
         # Create a vertical gradient fill that shows the actual gradient across the note height
         gradient = QLinearGradient(rect.left(), rect.top(), rect.left(), rect.bottom())
@@ -509,14 +518,13 @@ class PianoRollWidget(QWidget):
         
         painter.setBrush(QBrush(gradient))
         
-        # Draw with rounded corners
-        painter.drawRoundedRect(rect, 3, 3)
+        # Draw with rounded corners - more rounded for better appearance
+        painter.drawRoundedRect(rect, 6, 6)
         
-        # Draw note number inside if rectangle is big enough
-        painter.setPen(QPen(Qt.GlobalColor.white))
-        painter.setFont(QFont("Arial", 8, QFont.Weight.Bold))
-        
-        if rect_height > 14 and rect_width > 14:
+        # Draw note number inside if rectangle is big enough and labels are enabled
+        if self.visual_config.get('show_note_labels', True) and rect_height > 14 and rect_width > 14:
+            painter.setPen(QPen(Qt.GlobalColor.white))
+            painter.setFont(QFont("Arial", 8, QFont.Weight.Bold))
             text_rect = rect.adjusted(2, 2, -2, -2)
             note_names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
             octave = (note - 12) // 12
@@ -574,8 +582,8 @@ class PianoRollWidget(QWidget):
         x_center = x + (key_width / 2)
         rect = QRectF(x_center - (rect_width / 2), y_top_draw, rect_width, rect_height)
         
-        # Draw subtle glow effect for completed notes
-        self._draw_note_glow(painter, rect, color, intensity=0.8)
+        # Draw subtle glow effect for completed notes with stronger intensity
+        self._draw_note_glow(painter, rect, color, intensity=1.2, widget_height=widget_height)
         
         # No border for completed notes - just the solid color
         painter.setPen(Qt.PenStyle.NoPen)
@@ -601,15 +609,13 @@ class PianoRollWidget(QWidget):
         
         painter.setBrush(QBrush(gradient))
         
-        # Draw with rounded corners for better appearance
-        painter.drawRoundedRect(rect, 3, 3)
+        # Draw with rounded corners for better appearance - more rounded
+        painter.drawRoundedRect(rect, 6, 6)
         
-        # Draw note number inside
-        painter.setPen(QPen(Qt.GlobalColor.white))
-        painter.setFont(QFont("Arial", 8, QFont.Weight.Bold))
-        
-        # Only draw text if rectangle is big enough
-        if rect_height > 14 and rect_width > 14:
+        # Draw note number inside if rectangle is big enough and labels are enabled
+        if self.visual_config.get('show_note_labels', True) and rect_height > 14 and rect_width > 14:
+            painter.setPen(QPen(Qt.GlobalColor.white))
+            painter.setFont(QFont("Arial", 8, QFont.Weight.Bold))
             text_rect = rect.adjusted(2, 2, -2, -2)  # Small inset for text
             # Show note name (C4, D4, etc.) instead of MIDI number
             note_names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
@@ -852,8 +858,8 @@ class PianoRollWidget(QWidget):
         except Exception as e:
             print(f"Error drawing spark particles: {e}")
     
-    def _draw_note_glow(self, painter: QPainter, rect: QRectF, color: QColor, intensity: float = 1.0):
-        """Draw a glow effect around a note rectangle"""
+    def _draw_note_glow(self, painter: QPainter, rect: QRectF, color: QColor, intensity: float = 1.0, widget_height: int = None):
+        """Draw a glow effect around a note rectangle with gradient following the note"""
         # Save current state
         painter.save()
         
@@ -864,19 +870,98 @@ class PianoRollWidget(QWidget):
         for i in range(glow_layers):
             layer_ratio = (i + 1) / glow_layers
             glow_size = max_glow_size * layer_ratio
-            opacity = int((1.0 - layer_ratio) * 60 * intensity)  # Fade out as we go outward
-            
-            # Create glow color with reduced opacity
-            glow_color = QColor(color)
-            glow_color.setAlpha(opacity)
+            base_opacity = int((1.0 - layer_ratio) * 40)  # Reduced opacity for subtler glow
             
             # Expand rect for glow
             glow_rect = rect.adjusted(-glow_size, -glow_size, glow_size, glow_size)
             
-            # Draw glow layer
+            # Create gradient that follows the note's gradient if widget_height is provided
+            if widget_height:
+                gradient = QLinearGradient(glow_rect.left(), glow_rect.top(), glow_rect.left(), glow_rect.bottom())
+                
+                # Sample colors at multiple points along the glow height
+                num_samples = 5
+                for j in range(num_samples):
+                    position = j / (num_samples - 1) if num_samples > 1 else 0
+                    sample_y = glow_rect.top() + (glow_rect.bottom() - glow_rect.top()) * position
+                    sample_color = self.position_to_gradient_color(sample_y, widget_height)
+                    sample_color.setAlpha(base_opacity)
+                    gradient.setColorAt(position, sample_color)
+                
+                painter.setBrush(QBrush(gradient))
+            else:
+                # Fallback to single color glow
+                glow_color = QColor(color)
+                glow_color.setAlpha(base_opacity)
+                painter.setBrush(QBrush(glow_color))
+            
+            # Draw glow layer with more rounded corners
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QBrush(glow_color))
-            painter.drawRoundedRect(glow_rect, 3 + glow_size/2, 3 + glow_size/2)
+            corner_radius = 8 + glow_size  # More rounded corners that scale with glow size
+            painter.drawRoundedRect(glow_rect, corner_radius, corner_radius)
+        
+        # Restore state
+        painter.restore()
+    
+    def _draw_bottom_glow(self, painter: QPainter, rect: QRectF, color: QColor, widget_height: int):
+        """Draw a big glow effect at the bottom of active notes with bottom gradient color"""
+        # Save current state
+        painter.save()
+        
+        # Create a radial gradient that emanates from the bottom center of the note
+        bottom_center_x = rect.center().x()
+        bottom_y = widget_height  # Bottom of the widget
+        
+        # Create a smaller but multi-layered glow for smoother falloff
+        base_glow_radius = max(25, rect.width() * 1.0)  # Smaller base radius
+        
+        # Always use the bottom color from the gradient for this glow
+        bottom_color = self.position_to_gradient_color(widget_height, widget_height)
+        
+        # Draw multiple glow layers for smooth falloff
+        glow_layers = 3
+        for layer in range(glow_layers):
+            # Each layer gets progressively larger and more transparent
+            layer_multiplier = 1.0 + (layer * 0.6)  # 1.0, 1.6, 2.2
+            layer_radius = base_glow_radius * layer_multiplier
+            
+            # Create gradient for this layer
+            gradient = QRadialGradient(bottom_center_x, bottom_y, layer_radius)
+            
+            # Base opacity decreases with each layer
+            base_opacity = 100 - (layer * 25)  # 100, 75, 50
+            
+            # Create bright glow color for center using bottom gradient color
+            glow_color = QColor(bottom_color)
+            glow_color.setAlpha(base_opacity)
+            gradient.setColorAt(0, glow_color)
+            
+            # Mid-point with reduced opacity
+            mid_color = QColor(bottom_color)
+            mid_color.setAlpha(int(base_opacity * 0.6))
+            gradient.setColorAt(0.3, mid_color)
+            
+            # Another mid-point for smoother transition
+            fade_color = QColor(bottom_color)
+            fade_color.setAlpha(int(base_opacity * 0.3))
+            gradient.setColorAt(0.6, fade_color)
+            
+            # Edge fades to transparent
+            edge_color = QColor(bottom_color)
+            edge_color.setAlpha(0)
+            gradient.setColorAt(1, edge_color)
+            
+            # Draw this glow layer
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(gradient))
+            
+            glow_rect = QRectF(
+                bottom_center_x - layer_radius,
+                bottom_y - layer_radius,
+                layer_radius * 2,
+                layer_radius * 2
+            )
+            painter.drawEllipse(glow_rect)
         
         # Restore state
         painter.restore()
@@ -957,3 +1042,20 @@ class PianoRollWidget(QWidget):
                 positions = [i / (len(colors) - 1) for i in range(len(colors))]
         
         self.gradient_config['positions'] = positions
+    
+    def update_visual_config(self, **kwargs):
+        """Update visual configuration parameters
+        
+        Available parameters:
+        - show_note_labels: bool - show/hide note labels inside notes
+        """
+        for key, value in kwargs.items():
+            if key in self.visual_config:
+                self.visual_config[key] = value
+            else:
+                print(f"Warning: Unknown visual config parameter: {key}")
+                print(f"Available parameters: {list(self.visual_config.keys())}")
+    
+    def get_visual_config(self):
+        """Get current visual configuration"""
+        return self.visual_config.copy()

@@ -279,10 +279,10 @@ class MainWindow(QMainWindow):
         self.view_toggle_button.setToolTip("Switch between spectrum analyzer and piano roll")
         toolbar_row.addWidget(self.view_toggle_button)
         
-        # Particles configuration button
-        self.particles_button = QPushButton("Particles")
-        self.particles_button.setFixedSize(70, 30)
-        self.particles_button.setToolTip("Configure particle effects")
+        # Piano Roll configuration button
+        self.particles_button = QPushButton("Settings")
+        self.particles_button.setFixedSize(75, 30)  # Increased width from 70 to 85
+        self.particles_button.setToolTip("Configure piano roll effects and gradients")
         self.particles_button.setStyleSheet("""
             QPushButton {
                 background-color: #2d2d2d;
@@ -615,18 +615,18 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(10000, lambda: self.setWindowTitle(original_title))
     
     def open_particle_config(self):
-        """Open the particle configuration dialog"""
+        """Open the piano roll configuration dialog"""
         if not self.piano_roll:
             return
         
         try:
-            # Import the particle config dialog
-            from .particle_config_dialog import ParticleConfigDialog
+            # Import the piano roll config dialog
+            from .particle_config_dialog import PianoRollConfigDialog
         except ImportError:
-            from ui.particle_config_dialog import ParticleConfigDialog
+            from ui.particle_config_dialog import PianoRollConfigDialog
         
         # Create and show the dialog
-        dialog = ParticleConfigDialog(self.piano_roll, self)
+        dialog = PianoRollConfigDialog(self.piano_roll, self)
         dialog.show()
     
     def open_device_config(self):

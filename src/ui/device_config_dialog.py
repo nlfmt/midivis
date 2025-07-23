@@ -259,16 +259,16 @@ class DeviceConfigDialog(QDialog):
     def apply_styles(self):
         """Apply custom styling to the dialog"""
         style = """
-        QDialog {
+        DeviceConfigDialog {
             background-color: #2b2b2b;  /* Dark gray to match main UI and particle dialog */
             color: #ffffff;
         }
         
-        QWidget {
+        DeviceConfigDialog QWidget {
             background-color: #2b2b2b;  /* Ensure all widgets have consistent background */
         }
         
-        QLabel {
+        DeviceConfigDialog QLabel {
             color: #ffffff;
             background: transparent;
             border: none;
@@ -276,7 +276,7 @@ class DeviceConfigDialog(QDialog):
             margin: 0px;
         }
         
-        QComboBox {
+        DeviceConfigDialog QComboBox {
             background-color: #404040;
             border: 1px solid #555555;
             border-radius: 6px;
@@ -287,31 +287,31 @@ class DeviceConfigDialog(QDialog):
             selection-background-color: #0078d4;
         }
         
-        QComboBox:hover {
+        DeviceConfigDialog QComboBox:hover {
             border-color: #0078d4;
             background-color: #454545;
         }
         
-        QComboBox:focus {
+        DeviceConfigDialog QComboBox:focus {
             border-color: #0078d4;
             background-color: #454545;
             outline: none;
         }
         
-        QComboBox::drop-down {
+        DeviceConfigDialog QComboBox::drop-down {
             border: none;
             width: 20px;
             padding-right: 8px;
         }
         
-        QComboBox::down-arrow {
+        DeviceConfigDialog QComboBox::down-arrow {
             width: 0px;
             height: 0px;
             border: none;
             background: transparent;
         }
         
-        QComboBox QAbstractItemView {
+        DeviceConfigDialog QComboBox QAbstractItemView {
             background-color: #404040;
             border: 1px solid #555555;
             border-radius: 4px;
@@ -320,7 +320,7 @@ class DeviceConfigDialog(QDialog):
             outline: none;
         }
         
-        QPushButton {
+        DeviceConfigDialog QPushButton {
             background-color: #404040;
             border: 1px solid #555555;
             border-radius: 6px;
@@ -330,16 +330,16 @@ class DeviceConfigDialog(QDialog):
             font-weight: normal;  /* Not bold */
         }
         
-        QPushButton:hover {
+        DeviceConfigDialog QPushButton:hover {
             background-color: #4a4a4a;
             border-color: #0078d4;
         }
         
-        QPushButton:pressed {
+        DeviceConfigDialog QPushButton:pressed {
             background-color: #353535;
         }
         
-        QPushButton:focus {
+        DeviceConfigDialog QPushButton:focus {
             border-color: #0078d4;
             outline: none;
         }
