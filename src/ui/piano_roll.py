@@ -34,48 +34,59 @@ class Particle:
         self.turbulence_freq_x_2 = random.uniform(2.0, 4.5)  # Second layer with different frequency
         self.turbulence_freq_y_2 = random.uniform(1.5, 3.8)  # Second layer with different frequency
         self.turbulence_amplitude_2 = random.uniform(12, 25) * turbulence_strength # Secondary layer amplitude
-    
+        
+    def reset(self, x: float, y: float, color: QColor, velocity_x: float, velocity_y: float, life: float, size: float, turbulence_strength: float = 1.0, damping_factor: float = 0.985):
+        """Reset particle properties"""
+        self.x = x
+        self.y = y
+        self.initial_color = color
+        self.color = QColor(color)
+        self.velocity_x = velocity_x
+        self.velocity_y = velocity_y
+        self.life = life
+        self.max_life = life
+        self.size = size
+        self.initial_size = size
+        self.damping_factor = damping_factor
+        
+        # Reset turbulence parameters
+        self.turbulence_time = random.uniform(0, math.pi * 2)
+        self.turbulence_freq_x = random.uniform(1.2, 3.0)
+        self.turbulence_freq_y = random.uniform(0.8, 2.5)
+        self.turbulence_amplitude = random.uniform(25, 45) * turbulence_strength
+        self.noise_offset_x = random.uniform(0, 100)
+        self.noise_offset_y = random.uniform(0, 100)
+        self.turbulence_freq_x_2 = random.uniform(2.0, 4.5)
+        self.turbulence_freq_y_2 = random.uniform(1.5, 3.8)
+        self.turbulence_amplitude_2 = random.uniform(12, 25) * turbulence_strength
+
     def update(self, dt: float):
         """Update particle position and fade"""
         # Update turbulence time - for swirly movement
         self.turbulence_time += dt * 2.0  # Faster time progression for more dynamic swirls
-        
-        # Create layered 2D Perlin-like noise for complex swirly patterns
+
+        # Simplified turbulence using sine waves
         time_x = self.turbulence_time + self.noise_offset_x
         time_y = self.turbulence_time + self.noise_offset_y
-        
-        # Primary turbulence layer (main swirl pattern)
-        turbulence_x1 = math.sin(time_x * self.turbulence_freq_x) * self.turbulence_amplitude * dt
-        turbulence_y1 = math.cos(time_y * self.turbulence_freq_y) * self.turbulence_amplitude * dt
-        
-        # Secondary noise layer (detail swirls with perpendicular pattern)
-        turbulence_x2 = math.cos(time_x * self.turbulence_freq_x_2 + math.pi/4) * self.turbulence_amplitude_2 * dt
-        turbulence_y2 = math.sin(time_y * self.turbulence_freq_y_2 + math.pi/3) * self.turbulence_amplitude_2 * dt
-        
-        # Tertiary layer for very complex motion (creates figure-8 like patterns)
-        turbulence_x3 = math.sin(time_x * self.turbulence_freq_x * 0.5) * math.cos(time_y * self.turbulence_freq_y * 0.7) * self.turbulence_amplitude * 0.2 * dt
-        turbulence_y3 = math.cos(time_x * self.turbulence_freq_x * 0.6) * math.sin(time_y * self.turbulence_freq_y * 0.4) * self.turbulence_amplitude * 0.2 * dt
-        
-        # Combine all turbulence layers for very complex swirly motion
-        total_turbulence_x = turbulence_x1 + turbulence_x2 + turbulence_x3
-        total_turbulence_y = turbulence_y1 + turbulence_y2 + turbulence_y3
-        
-        # Apply base velocity with enhanced turbulence
-        self.x += (self.velocity_x * dt) + total_turbulence_x
-        self.y += (self.velocity_y * dt) + total_turbulence_y
-        
+
+        turbulence_x = math.sin(time_x * self.turbulence_freq_x) * self.turbulence_amplitude * dt
+        turbulence_y = math.cos(time_y * self.turbulence_freq_y) * self.turbulence_amplitude * dt
+
+        # Apply base velocity with simplified turbulence
+        self.x += (self.velocity_x * dt) + turbulence_x
+        self.y += (self.velocity_y * dt) + turbulence_y
+
         self.life -= dt
-        
+
         # Fade out as life decreases with steeper curve for better visibility
         alpha_ratio = max(0, self.life / self.max_life)
         alpha_curve = alpha_ratio * alpha_ratio  # Quadratic falloff for more dramatic fade
         self.color.setAlpha(int(255 * alpha_curve))
-        
-        # Shrink particle size over its lifespan with some randomness
+
+        # Shrink particle size over its lifespan
         base_size_ratio = max(0.1, self.life / self.max_life)
-        size_variation = 1.0 + (math.sin(self.turbulence_time * 3.0) * 0.08)  # More size variation
-        self.size = self.initial_size * base_size_ratio * size_variation
-        
+        self.size = self.initial_size * base_size_ratio
+
         # Apply configurable damping to slow down particles over time
         self.velocity_x *= self.damping_factor
         self.velocity_y *= self.damping_factor
@@ -83,6 +94,22 @@ class Particle:
     def is_alive(self) -> bool:
         """Check if particle is still alive"""
         return self.life > 0
+
+
+class ParticlePool:
+    """A pool to manage reusable particles."""
+    def __init__(self, max_particles):
+        self.max_particles = max_particles
+        self.pool = []
+
+    def get_particle(self):
+        if self.pool:
+            return self.pool.pop()
+        return None
+
+    def return_particle(self, particle):
+        if len(self.pool) < self.max_particles:
+            self.pool.append(particle)
 
 
 class PianoRollWidget(QWidget):
@@ -129,7 +156,9 @@ class PianoRollWidget(QWidget):
             'spawn_x_spread': 0.9,                # horizontal spread factor (0.0-1.0) across note width
             'particles_per_note_base': 2,         # base number of particles per note
             'particles_per_velocity': 20,         # velocity divisor for extra particles
-            'max_particles_per_note': 15,         # maximum particles per note per spawn
+            'max_particles_per_note': 15,                 # Maximum number of regular particles
+            'max_particles': 500,                 # Maximum number of regular particles
+            'max_spark_particles': 200,           # Maximum number of spark particles
             
             # Spark particle configuration
             'spark_enabled': True,                 # enable/disable spark particles
@@ -141,6 +170,10 @@ class PianoRollWidget(QWidget):
             'spark_life_max': 2.0,                # maximum spark life in seconds (increased for visibility)
             'spark_count_ratio': 0.8,             # ratio of sparks to regular particles (increased for more sparks)
         }
+        
+        # Initialize particle pools for regular and spark particles
+        self.particle_pool = ParticlePool(self.particle_config['max_particles'])
+        self.spark_particle_pool = ParticlePool(self.particle_config['max_spark_particles'])
         
         # Pause functionality
         self.is_paused = False
@@ -195,6 +228,9 @@ class PianoRollWidget(QWidget):
         #     background-color: #1a1a1a;
         #     border-radius: 8px;
         # """)
+        
+        self.cached_widget_width = 0
+        self.cached_widget_height = 0
     
     def note_to_key_index(self, midi_note: int) -> int:
         """Convert MIDI note number to piano key index (0-87)"""
@@ -349,6 +385,13 @@ class PianoRollWidget(QWidget):
             
             widget_width = self.width()
             widget_height = self.height()
+            
+            # Cache widget scale to avoid redundant calculations
+            if self.cached_widget_width != widget_width or self.cached_widget_height != widget_height:
+                self.cached_widget_width = widget_width
+                self.cached_widget_height = widget_height
+                self.widget_scale = min(widget_width, widget_height) / 300.0
+                self.widget_scale = max(0.5, min(3.0, self.widget_scale))
             
             # Update particles and timing
             current_real_time = time.time()
@@ -649,6 +692,9 @@ class PianoRollWidget(QWidget):
                 particle.update(dt)
                 if particle.is_alive():
                     particles_to_keep.append(particle)
+                else:
+                    # Return particle to pool if not alive
+                    self.particle_pool.return_particle(particle)
             self.particles = particles_to_keep
             
             # Update existing spark particles
@@ -657,6 +703,9 @@ class PianoRollWidget(QWidget):
                 particle.update(dt)
                 if particle.is_alive():
                     spark_particles_to_keep.append(particle)
+                else:
+                    # Return spark particle to pool if not alive
+                    self.spark_particle_pool.return_particle(particle)
             self.spark_particles = spark_particles_to_keep
         except Exception as e:
             print(f"Error updating particles: {e}")
@@ -723,9 +772,15 @@ class PianoRollWidget(QWidget):
                         particle_size = max(0.1, min(5.0, particle_size))  # Reasonable size limits
                         
                         # Create particle with configurable turbulence strength and damping
-                        particle = Particle(px, py, particle_color, vx, vy, life, particle_size, 
-                                          self.particle_config['turbulence_strength'],
-                                          self.particle_config['damping_factor'])
+                        particle = self.particle_pool.get_particle()
+                        if not particle:
+                            particle = Particle(px, py, particle_color, vx, vy, life, particle_size, 
+                                                self.particle_config['turbulence_strength'],
+                                                self.particle_config['damping_factor'])
+                        else:
+                            particle.reset(px, py, particle_color, vx, vy, life, particle_size, 
+                                           self.particle_config['turbulence_strength'],
+                                           self.particle_config['damping_factor'])
                         self.particles.append(particle)
                     
                     # Spawn spark particles if enabled
@@ -760,7 +815,13 @@ class PianoRollWidget(QWidget):
                             spark_size = max(0.1, min(2.0, spark_size))  # Clamp spark size
                             
                             # Create spark particle with same movement parameters but different visuals
-                            spark_particle = Particle(spark_px, spark_py, spark_color, spark_vx, spark_vy, spark_life, spark_size, 
+                            spark_particle = self.spark_particle_pool.get_particle()
+                            if not spark_particle:
+                                spark_particle = Particle(spark_px, spark_py, spark_color, spark_vx, spark_vy, spark_life, spark_size, 
+                                                          self.particle_config['turbulence_strength'],
+                                                          self.particle_config['damping_factor'])
+                            else:
+                                spark_particle.reset(spark_px, spark_py, spark_color, spark_vx, spark_vy, spark_life, spark_size, 
                                                      self.particle_config['turbulence_strength'],
                                                      self.particle_config['damping_factor'])
                             self.spark_particles.append(spark_particle)
@@ -1059,3 +1120,24 @@ class PianoRollWidget(QWidget):
     def get_visual_config(self):
         """Get current visual configuration"""
         return self.visual_config.copy()
+    
+    def resizeEvent(self, event):
+        """Handle widget resize - recompute gradient colors"""
+        super().resizeEvent(event)
+        
+        widget_height = self.height()
+        
+        # Precompute gradient colors for a fixed number of positions
+        self.precomputed_gradient_colors = []
+        num_precomputed_positions = 100
+        for i in range(num_precomputed_positions):
+            normalized_pos = i / (num_precomputed_positions - 1)
+            y_position = normalized_pos * widget_height
+            color = self.position_to_gradient_color(y_position, widget_height)
+            self.precomputed_gradient_colors.append(color)
+
+    def position_to_precomputed_gradient_color(self, y_position: float, widget_height: int) -> QColor:
+        """Get color from precomputed gradient colors based on Y position"""
+        normalized_pos = y_position / widget_height
+        index = int(normalized_pos * (len(self.precomputed_gradient_colors) - 1))
+        return self.precomputed_gradient_colors[index]
