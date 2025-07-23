@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import Qt, QTimer, QRectF, QPointF
+from PySide6.QtCore import Qt, QTimer, QRectF, QPointF, QThread, QMutex, QMutexLocker
 from PySide6.QtGui import QPainter, QBrush, QPen, QColor, QLinearGradient, QFont, QPainterPath, QRadialGradient
 import time
 import random
@@ -110,6 +110,34 @@ class ParticlePool:
     def return_particle(self, particle):
         if len(self.pool) < self.max_particles:
             self.pool.append(particle)
+
+
+class ParticleUpdateWorker(QThread):
+    """Worker thread for updating particles."""
+    def __init__(self, particles, mutex, parent=None):
+        super().__init__(parent)
+        self.particles = particles
+        self.mutex = mutex
+        self.running = True
+
+    def run(self):
+        while self.running:
+            with QMutexLocker(self.mutex):
+                current_time = time.time()
+                dt = current_time - getattr(self, 'last_update_time', current_time)
+                self.last_update_time = current_time
+
+                # Update particles
+                for particle in self.particles[:]:
+                    particle.update(dt)
+                    if not particle.is_alive():
+                        self.particles.remove(particle)
+
+            self.msleep(16)  # Approx. 60 FPS
+
+    def stop(self):
+        self.running = False
+        self.wait()
 
 
 class PianoRollWidget(QWidget):
@@ -231,6 +259,13 @@ class PianoRollWidget(QWidget):
         
         self.cached_widget_width = 0
         self.cached_widget_height = 0
+        
+        # Thread-safe particle list and mutex
+        self.particles_mutex = QMutex()
+
+        # Particle update worker thread
+        self.particle_worker = ParticleUpdateWorker(self.particles, self.particles_mutex)
+        self.particle_worker.start()
     
     def note_to_key_index(self, midi_note: int) -> int:
         """Convert MIDI note number to piano key index (0-87)"""
@@ -406,11 +441,6 @@ class PianoRollWidget(QWidget):
                 # While playing, use current time minus all pause durations
                 current_time = time.time() - self.total_pause_duration
             
-            # Update and spawn particles for active notes
-            if not self.is_paused:
-                self._update_particles(dt)
-                self._spawn_particles_for_active_notes(current_time, widget_width, widget_height)
-            
             # Clear the entire widget with transparent background first
             painter.fillRect(self.rect(), QColor(0, 0, 0, 0))
             
@@ -480,6 +510,12 @@ class PianoRollWidget(QWidget):
             
             # Draw spark particles on top of regular particles
             self._draw_spark_particles(painter)
+            
+            # Spawn particles for active notes
+            self._spawn_particles_for_active_notes(current_time, self.width(), self.height())
+            
+            # Update all particles
+            self._update_particles(dt)
             
         except Exception as e:
             print(f"Error in paintEvent: {e}")
@@ -715,7 +751,7 @@ class PianoRollWidget(QWidget):
         try:
             if current_time - self.last_particle_time < self.particle_config['spawn_rate']:
                 return
-            
+
             # Calculate widget scale factor for particle size and speed
             widget_scale = min(widget_width, widget_height) / 300.0  # Base scale on a 300px reference
             widget_scale = max(0.5, min(3.0, widget_scale))  # Clamp between 0.5x and 3x
@@ -838,34 +874,35 @@ class PianoRollWidget(QWidget):
         painter.setPen(Qt.PenStyle.NoPen)
         
         try:
-            for particle in self.particles:
-                # Create radial gradient for particle glow effect - smaller glow radius
-                gradient = QRadialGradient(QPointF(particle.x, particle.y), particle.size * 1.2)
-                
-                # Center is bright and opaque
-                center_color = QColor(particle.color)
-                gradient.setColorAt(0, center_color)
-                
-                # Mid-point is slightly dimmer
-                mid_color = QColor(particle.color)
-                mid_color.setAlpha(int(particle.color.alpha() * 0.6))
-                gradient.setColorAt(0.6, mid_color)
-                
-                # Edge fades to transparent for glow effect
-                edge_color = QColor(particle.color)
-                edge_color.setAlpha(0)
-                gradient.setColorAt(1, edge_color)
-                
-                painter.setBrush(QBrush(gradient))
-                
-                # Draw particle as a glowing circle - size now changes over lifespan
-                particle_rect = QRectF(
-                    particle.x - particle.size, 
-                    particle.y - particle.size, 
-                    particle.size * 2, 
-                    particle.size * 2
-                )
-                painter.drawEllipse(particle_rect)
+            with QMutexLocker(self.particles_mutex):
+                for particle in self.particles:
+                    # Create radial gradient for particle glow effect - smaller glow radius
+                    gradient = QRadialGradient(QPointF(particle.x, particle.y), particle.size * 1.2)
+                    
+                    # Center is bright and opaque
+                    center_color = QColor(particle.color)
+                    gradient.setColorAt(0, center_color)
+                    
+                    # Mid-point is slightly dimmer
+                    mid_color = QColor(particle.color)
+                    mid_color.setAlpha(int(particle.color.alpha() * 0.6))
+                    gradient.setColorAt(0.6, mid_color)
+                    
+                    # Edge fades to transparent for glow effect
+                    edge_color = QColor(particle.color)
+                    edge_color.setAlpha(0)
+                    gradient.setColorAt(1, edge_color)
+                    
+                    painter.setBrush(QBrush(gradient))
+                    
+                    # Draw particle as a glowing circle - size now changes over lifespan
+                    particle_rect = QRectF(
+                        particle.x - particle.size, 
+                        particle.y - particle.size, 
+                        particle.size * 2, 
+                        particle.size * 2
+                    )
+                    painter.drawEllipse(particle_rect)
         except Exception as e:
             print(f"Error drawing particles: {e}")
     
@@ -1121,6 +1158,11 @@ class PianoRollWidget(QWidget):
         """Get current visual configuration"""
         return self.visual_config.copy()
     
+    def closeEvent(self, event):
+        """Ensure the worker thread is stopped when the widget is closed."""
+        self.particle_worker.stop()
+        super().closeEvent(event)
+
     def resizeEvent(self, event):
         """Handle widget resize - recompute gradient colors"""
         super().resizeEvent(event)
