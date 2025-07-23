@@ -237,7 +237,7 @@ class PianoRollWidget(QWidget):
         
         # Visual settings configuration
         self.visual_config = {
-            'show_note_labels': True,  # Show note labels (C4, D4, etc.) inside notes
+            'show_note_labels': False,  # Show note labels (C4, D4, etc.) inside notes
         }
         
         # Setup timer for animation
@@ -662,7 +662,7 @@ class PianoRollWidget(QWidget):
         rect = QRectF(x_center - (rect_width / 2), y_top_draw, rect_width, rect_height)
         
         # Draw subtle glow effect for completed notes with stronger intensity
-        self._draw_note_glow(painter, rect, color, intensity=1.2, widget_height=widget_height)
+        self._draw_note_glow(painter, rect, color, intensity=1.5, widget_height=widget_height)
         
         # No border for completed notes - just the solid color
         painter.setPen(Qt.PenStyle.NoPen)
@@ -962,8 +962,8 @@ class PianoRollWidget(QWidget):
         painter.save()
         
         # Create glow by drawing multiple layers with increasing size and decreasing opacity
-        glow_layers = 5
-        max_glow_size = 8 * intensity
+        glow_layers = 3
+        max_glow_size = 6 * intensity
         
         for i in range(glow_layers):
             layer_ratio = (i + 1) / glow_layers
