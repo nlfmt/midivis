@@ -59,6 +59,7 @@ class MainWindow(QMainWindow):
         self.current_midi_device = None     # MIDIDevice object or None
         
         # UI components
+        self.toolbar = None
         self.scroll_speed_input = None
         self.midi_delay_input = None
         self.play_pause_button = None
@@ -72,6 +73,9 @@ class MainWindow(QMainWindow):
         self.device_worker = None
         self.device_config_dialog = None  # Device configuration dialog
         self.demo_shortcut = None  # F8 keyboard shortcut for demo mode
+        self.reload_shortcut = None
+        self.fullscreen_shortcut = None  # F11 keyboard shortcut for fullscreen
+        self.toolbar_shortcut = None  # F9 keyboard shortcut for toolbar toggle
         
         # Loading state
         self.devices_loaded = False
@@ -81,7 +85,7 @@ class MainWindow(QMainWindow):
         self.show_piano_roll = False  # Toggle between spectrum and piano roll
         
         # Setup window
-        self.setWindowTitle("Audio Input Streamer (F8: Demo)")  # Indicate F8 shortcut
+        self.setWindowTitle("Audio Input Streamer")
         
         # Setup UI and connections
         self.setup_ui()
@@ -260,8 +264,10 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(12, 12, 12, 12)
         
         # Single toolbar row with all controls
-        toolbar_row = QHBoxLayout()
+        self.toolbar = QWidget()
+        toolbar_row = QHBoxLayout(self.toolbar)
         toolbar_row.setSpacing(8)
+        toolbar_row.setContentsMargins(0, 0, 0, 0)
         
         # Left-aligned controls: streaming/mute, spectrum, particles
         
@@ -426,7 +432,7 @@ class MainWindow(QMainWindow):
         """)
         toolbar_row.addWidget(self.midi_delay_input)
         
-        layout.addLayout(toolbar_row)
+        layout.addWidget(self.toolbar)
         
         # Placeholder for visualization widgets - will be replaced with actual widgets when needed
         self.spectrum_placeholder = QLabel("Loading visualization...")
@@ -483,6 +489,12 @@ class MainWindow(QMainWindow):
         # Keyboard shortcuts
         self.demo_shortcut = QShortcut(QKeySequence(Qt.Key.Key_F8), self)
         self.demo_shortcut.activated.connect(self.start_demo_mode)
+        self.reload_shortcut = QShortcut(QKeySequence(Qt.Key.Key_F5), self)
+        self.reload_shortcut.activated.connect(self.start_device_loading)
+        self.fullscreen_shortcut = QShortcut(QKeySequence(Qt.Key.Key_F11), self)
+        self.fullscreen_shortcut.activated.connect(self.toggle_fullscreen)
+        self.toolbar_shortcut = QShortcut(QKeySequence(Qt.Key.Key_F9), self)
+        self.toolbar_shortcut.activated.connect(self.toggle_toolbar)
     
     def on_input_device_changed(self, display_name: str):
         """Handle input device selection change from device dialog"""
@@ -613,7 +625,19 @@ class MainWindow(QMainWindow):
         
         # Restore title after demo duration (approximately 10 seconds)
         QTimer.singleShot(10000, lambda: self.setWindowTitle(original_title))
-    
+        
+    def toggle_fullscreen(self):
+        if self.isFullScreen():
+            self.setWindowState(self.windowState() & ~Qt.WindowState.WindowFullScreen)
+        else:
+            self.setWindowState(self.windowState() | Qt.WindowState.WindowFullScreen)
+            
+    def toggle_toolbar(self):
+        if self.toolbar.isVisible():
+            self.toolbar.hide()
+        else:
+            self.toolbar.show()
+
     def open_particle_config(self):
         """Open the piano roll configuration dialog"""
         if not self.piano_roll:
