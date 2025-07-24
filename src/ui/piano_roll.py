@@ -7,7 +7,51 @@ import math
 from typing import Dict, List, Tuple
 
 from src.core.settings_manager import SettingsManager
+from src.ui.piano_layout import PianoLayout
 
+
+DEFAULT_PARTICLE_CONFIG = {
+    'enabled': True,                       # global switch for the particle system
+    'spawn_rate': 0.01,                    # seconds between particle spawns per active note
+    'initial_velocity_x_min': -5.0,       # minimum initial X velocity
+    'initial_velocity_x_max': 5.0,        # maximum initial X velocity
+    'initial_velocity_y_min': -80.0,      # minimum initial Y velocity (negative = upward)
+    'initial_velocity_y_max': -30.0,       # maximum initial Y velocity (negative = upward)
+    'initial_size_min': 0.4,              # minimum initial particle size
+    'initial_size_max': 0.8,              # maximum initial particle size
+    'initial_opacity_min': 40,            # minimum initial opacity (0-255)
+    'initial_opacity_max': 80,            # maximum initial opacity (0-255)
+    'turbulence_strength': 0.8,           # multiplier for turbulence amplitude (0.0-2.0+)
+    'damping_factor': 0.995,              # velocity damping per frame (0.0-1.0, lower = more damping)
+    'life_min': 0.5,                      # minimum particle life in seconds
+    'life_max': 3.0,                      # maximum particle life in seconds
+    'spawn_x_spread': 0.9,                # horizontal spread factor (0.0-1.0) across note width
+    'particles_per_note_base': 2,         # base number of particles per note
+    'particles_per_velocity': 20,         # velocity divisor for extra particles
+    'max_particles_per_note': 15,                 # Maximum number of regular particles
+    'max_particles': 500,                 # Maximum number of regular particles
+    'max_spark_particles': 200,           # Maximum number of spark particles
+    
+    # Spark particle configuration
+    'spark_enabled': True,                 # enable/disable spark particles
+    'spark_size_min': 0.3,                # minimum spark particle size (increased for visibility)
+    'spark_size_max': 0.5,                # maximum spark particle size (increased for visibility)
+    'spark_opacity_min': 150,             # minimum spark opacity (0-255) (increased for visibility)
+    'spark_opacity_max': 255,             # maximum spark opacity (0-255)
+    'spark_life_min': 0.5,                # minimum spark life in seconds (increased for visibility)
+    'spark_life_max': 2.0,                # maximum spark life in seconds (increased for visibility)
+    'spark_count_ratio': 0.8,             # ratio of sparks to regular particles (increased for more sparks)
+}
+
+DEFAULT_GRADIENT_CONFIG = {
+    'enabled': True,  # Enable gradient coloring
+    'colors': [
+        (255, 50, 50),    # Red (top of widget)
+        (255, 150, 0),    # Orange (middle)
+        (255, 100, 150),  # Pink (bottom of widget)
+    ],
+    'positions': [0.0, 0.5, 1.0],  # Relative positions (0=top, 1=bottom)
+}
 
 class Particle:
     """A single particle for visual effects"""
@@ -161,6 +205,13 @@ class PianoRollWidget(QWidget):
         self.WATERFALL_LENGTH = 5.0  # seconds of history to show
         self.KEY_WIDTH_MIN = 5  # Minimum key width for better visibility
         
+        # Note width scaling factors
+        self.WHITE_NOTE_WIDTH_SCALE = 0.75  # Scale factor for white note widths (0.0-1.0)
+        self.BLACK_NOTE_WIDTH_SCALE = 0.65  # Scale factor for black note widths (0.0-1.0)
+        self.MIN_NOTE_WIDTH = 6  # Minimum note width regardless of scaling
+        self.WHITE_NOTE_BORDER_RADIUS_RATIO = 0.3
+        self.BLACK_NOTE_BORDER_RADIUS_RATIO = 0.4
+        
         # Active notes tracking
         self.active_notes: Dict[int, Tuple[float, int]] = {}  # note -> (start_time, velocity)
         self.note_history: List[Tuple[int, float, float, int, float]] = []  # (note, start_time, end_time, velocity, visual_length)
@@ -171,39 +222,7 @@ class PianoRollWidget(QWidget):
         self.last_particle_time = 0.0
         
         # Particle system configuration - centralized parameters for easy tweaking
-        default_particle_config = {
-            'enabled': True,                       # global switch for the particle system
-            'spawn_rate': 0.01,                    # seconds between particle spawns per active note
-            'initial_velocity_x_min': -5.0,       # minimum initial X velocity
-            'initial_velocity_x_max': 5.0,        # maximum initial X velocity
-            'initial_velocity_y_min': -80.0,      # minimum initial Y velocity (negative = upward)
-            'initial_velocity_y_max': -30.0,       # maximum initial Y velocity (negative = upward)
-            'initial_size_min': 0.4,              # minimum initial particle size
-            'initial_size_max': 0.8,              # maximum initial particle size
-            'initial_opacity_min': 40,            # minimum initial opacity (0-255)
-            'initial_opacity_max': 80,            # maximum initial opacity (0-255)
-            'turbulence_strength': 0.8,           # multiplier for turbulence amplitude (0.0-2.0+)
-            'damping_factor': 0.995,              # velocity damping per frame (0.0-1.0, lower = more damping)
-            'life_min': 0.5,                      # minimum particle life in seconds
-            'life_max': 3.0,                      # maximum particle life in seconds
-            'spawn_x_spread': 0.9,                # horizontal spread factor (0.0-1.0) across note width
-            'particles_per_note_base': 2,         # base number of particles per note
-            'particles_per_velocity': 20,         # velocity divisor for extra particles
-            'max_particles_per_note': 15,                 # Maximum number of regular particles
-            'max_particles': 500,                 # Maximum number of regular particles
-            'max_spark_particles': 200,           # Maximum number of spark particles
-            
-            # Spark particle configuration
-            'spark_enabled': True,                 # enable/disable spark particles
-            'spark_size_min': 0.3,                # minimum spark particle size (increased for visibility)
-            'spark_size_max': 0.5,                # maximum spark particle size (increased for visibility)
-            'spark_opacity_min': 150,             # minimum spark opacity (0-255) (increased for visibility)
-            'spark_opacity_max': 255,             # maximum spark opacity (0-255)
-            'spark_life_min': 0.5,                # minimum spark life in seconds (increased for visibility)
-            'spark_life_max': 2.0,                # maximum spark life in seconds (increased for visibility)
-            'spark_count_ratio': 0.8,             # ratio of sparks to regular particles (increased for more sparks)
-        }
-        self.particle_config = { **default_particle_config, **self.settings_manager.get_particle_config() }
+        self.particle_config = { **DEFAULT_PARTICLE_CONFIG, **self.settings_manager.get_particle_config() }
         
         # Initialize particle pools for regular and spark particles
         self.particle_pool = ParticlePool(self.particle_config['max_particles'])
@@ -231,16 +250,7 @@ class PianoRollWidget(QWidget):
         
         # Static gradient configuration for note coloring
         # Notes will be colored based on their Y position, not velocity
-        default_gradient_config = {
-            'enabled': True,  # Enable gradient coloring
-            'colors': [
-                (255, 50, 50),    # Red (top of widget)
-                (255, 150, 0),    # Orange (middle)
-                (255, 100, 150),  # Pink (bottom of widget)
-            ],
-            'positions': [0.0, 0.5, 1.0],  # Relative positions (0=top, 1=bottom)
-        }
-        self.gradient_config = { **default_gradient_config, **self.settings_manager.get_gradient_config() }
+        self.gradient_config = { **DEFAULT_GRADIENT_CONFIG, **self.settings_manager.get_gradient_config() }
 
         # Visual settings configuration
         self.visual_config = {
@@ -276,22 +286,42 @@ class PianoRollWidget(QWidget):
     
     def note_to_key_index(self, midi_note: int) -> int:
         """Convert MIDI note number to piano key index (0-87)"""
-        return max(0, min(87, midi_note - self.LOWEST_NOTE))
+        return PianoLayout.midi_note_to_key_index(midi_note)
     
     def key_index_to_x(self, key_index: int, widget_width: int) -> float:
-        """Convert key index to x coordinate"""
-        # More even spacing for better visualization
-        key_width = max(self.KEY_WIDTH_MIN, widget_width / self.NUM_KEYS)
-        return key_index * key_width
+        """Convert key index to x coordinate using realistic piano layout"""
+        midi_note = PianoLayout.key_index_to_midi_note(key_index)
+        key_info = PianoLayout.calculate_key_info(midi_note, widget_width)
+        return key_info.x
     
     def key_width(self, widget_width: int) -> float:
-        """Get the width of a key based on widget width"""
-        return max(self.KEY_WIDTH_MIN, widget_width / self.NUM_KEYS)
+        """Get the average width of keys (for backward compatibility)"""
+        # This is used in some places for spacing calculations
+        # Return the width of a white key as the base unit
+        white_key_count = PianoLayout.get_white_key_count()
+        return widget_width / white_key_count
+    
+    def get_key_info(self, midi_note: int, widget_width: int):
+        """Get complete key information for a MIDI note"""
+        return PianoLayout.calculate_key_info(midi_note, widget_width)
     
     def is_black_key(self, midi_note: int) -> bool:
         """Check if a MIDI note corresponds to a black key"""
-        note_in_octave = midi_note % 12
-        return note_in_octave in [1, 3, 6, 8, 10]  # C#, D#, F#, G#, A#
+        return PianoLayout.is_black_key(midi_note)
+    
+    def get_note_width(self, midi_note: int, widget_width: int) -> float:
+        """Get the scaled width for a note rectangle based on whether it's black or white"""
+        key_info = self.get_key_info(midi_note, widget_width)
+        
+        if key_info.is_black:
+            # Scale black note width
+            scaled_width = key_info.width * self.BLACK_NOTE_WIDTH_SCALE
+        else:
+            # Scale white note width
+            scaled_width = key_info.width * self.WHITE_NOTE_WIDTH_SCALE
+        
+        # Ensure minimum width
+        return max(self.MIN_NOTE_WIDTH, scaled_width)
     
     def velocity_to_color(self, velocity: int) -> QColor:
         """Convert MIDI velocity to color - DEPRECATED, kept for compatibility"""
@@ -471,28 +501,22 @@ class PianoRollWidget(QWidget):
             painter.setClipPath(content_path)
             
             # Draw piano key guides with white/black key visualization
-            key_width = self.key_width(widget_width)
+            all_key_info = PianoLayout.get_all_key_info(widget_width)
             
             # Draw white keys first (background)
             painter.setPen(Qt.PenStyle.NoPen)
-            for i in range(self.NUM_KEYS):
-                midi_note = i + self.LOWEST_NOTE
-                x = self.key_index_to_x(i, widget_width)
-                
-                if not self.is_black_key(midi_note):
+            for i, key_info in enumerate(all_key_info):
+                if not key_info.is_black:
                     # Draw white key - much darker and more subtle
                     painter.setBrush(QBrush(QColor(8,8,8)))
-                    painter.drawRect(QRectF(x, 0, key_width, widget_height))
+                    painter.drawRect(QRectF(key_info.x, 0, key_info.width, widget_height))
             
             # Draw black keys (overlay)
-            for i in range(self.NUM_KEYS):
-                midi_note = i + self.LOWEST_NOTE
-                x = self.key_index_to_x(i, widget_width)
-                
-                if self.is_black_key(midi_note):
+            for i, key_info in enumerate(all_key_info):
+                if key_info.is_black:
                     # Draw black key - slightly darker than background
                     painter.setBrush(QBrush(QColor(6, 6, 6)))
-                    painter.drawRect(QRectF(x, 0, key_width, widget_height))
+                    painter.drawRect(QRectF(key_info.x, 0, key_info.width, widget_height))
             
             # Draw octave separators for C notes - much more subtle
             painter.setPen(QPen(QColor(20, 20, 20)))
@@ -500,8 +524,8 @@ class PianoRollWidget(QWidget):
                 midi_note = i + self.LOWEST_NOTE
                 note_in_octave = midi_note % 12
                 if note_in_octave == 0:  # C notes
-                    x = self.key_index_to_x(i, widget_width)
-                    painter.drawLine(x, 0, x, widget_height)
+                    key_info = PianoLayout.calculate_key_info(midi_note, widget_width)
+                    painter.drawLine(key_info.x, 0, key_info.x, widget_height)
             
             # Remove old notes from history - only remove when they're completely above the widget
             self.note_history = [note_data for note_data in self.note_history 
@@ -540,10 +564,8 @@ class PianoRollWidget(QWidget):
                                   velocity: int, current_time: float, 
                                   widget_width: int, widget_height: int):
         """Draw an active note rectangle that grows upward from the bottom"""
-        # Calculate position
-        key_index = self.note_to_key_index(note)
-        key_width = self.key_width(widget_width)
-        x = self.key_index_to_x(key_index, widget_width)
+        # Get key information using realistic piano layout
+        key_info = self.get_key_info(note, widget_width)
         
         # Calculate how long the note has been playing
         note_duration = current_time - start_time
@@ -571,13 +593,19 @@ class PianoRollWidget(QWidget):
             min(255, base_color.red() + 30),    # Reduced brightness boost (was +50)
             min(255, base_color.green() + 30),  # Same brightness as completed notes
             min(255, base_color.blue() + 30),
-            220  # Slightly more opaque for active notes
+            255  # Slightly more opaque for active notes
         )
         
-        # Create rect with slight inset for visibility
-        rect_width = max(10, key_width * 0.9)
-        x_center = x + (key_width / 2)
+        # Create rect using the scaled note width
+        rect_width = self.get_note_width(note, widget_width)
+        x_center = key_info.x + (key_info.width / 2)
         rect = QRectF(x_center - (rect_width / 2), y_top, rect_width, rect_height)
+        
+        # Calculate border radius based on note type
+        if key_info.is_black:
+            border_radius = rect_width * self.BLACK_NOTE_BORDER_RADIUS_RATIO
+        else:
+            border_radius = rect_width * self.WHITE_NOTE_BORDER_RADIUS_RATIO
         
         # Draw glow effect for active notes with stronger intensity
         self._draw_note_glow(painter, rect, color, intensity=1.5, widget_height=widget_height)
@@ -604,14 +632,13 @@ class PianoRollWidget(QWidget):
                 min(255, sample_color.red() + 50),
                 min(255, sample_color.green() + 50),
                 min(255, sample_color.blue() + 50),
-                220
             )
             gradient.setColorAt(position, enhanced_color)
         
         painter.setBrush(QBrush(gradient))
         
         # Draw with rounded corners - more rounded for better appearance
-        painter.drawRoundedRect(rect, 6, 6)
+        painter.drawRoundedRect(rect, border_radius, border_radius)
         
         # Draw note number inside if rectangle is big enough and labels are enabled
         if self.visual_config.get('show_note_labels', True) and rect_height > 14 and rect_width > 14:
@@ -628,10 +655,8 @@ class PianoRollWidget(QWidget):
                                      end_time: float, velocity: int, visual_length: float, current_time: float, 
                                      widget_width: int, widget_height: int):
         """Draw a completed note rectangle that moves upward with preserved length"""
-        # Calculate position
-        key_index = self.note_to_key_index(note)
-        key_width = self.key_width(widget_width)
-        x = self.key_index_to_x(key_index, widget_width)
+        # Get key information using realistic piano layout
+        key_info = self.get_key_info(note, widget_width)
         
         # Calculate how much time has elapsed since the note ended
         time_since_end = current_time - end_time
@@ -666,13 +691,18 @@ class PianoRollWidget(QWidget):
             min(255, base_color.red() + 30),
             min(255, base_color.green() + 30),
             min(255, base_color.blue() + 30),
-            240  # Make slightly transparent
         )
         
-        # Create rect with slight inset for visibility
-        rect_width = max(10, key_width * 0.9)
-        x_center = x + (key_width / 2)
+        # Create rect using the scaled note width
+        rect_width = self.get_note_width(note, widget_width)
+        x_center = key_info.x + (key_info.width / 2)
         rect = QRectF(x_center - (rect_width / 2), y_top_draw, rect_width, rect_height)
+        
+        # Calculate border radius based on note type
+        if key_info.is_black:
+            border_radius = rect_width * self.BLACK_NOTE_BORDER_RADIUS_RATIO
+        else:
+            border_radius = rect_width * self.WHITE_NOTE_BORDER_RADIUS_RATIO
         
         # Draw subtle glow effect for completed notes with stronger intensity
         self._draw_note_glow(painter, rect, color, intensity=1.5, widget_height=widget_height)
@@ -695,14 +725,13 @@ class PianoRollWidget(QWidget):
                 min(255, sample_color.red() + 30),
                 min(255, sample_color.green() + 30),
                 min(255, sample_color.blue() + 30),
-                240
             )
             gradient.setColorAt(position, enhanced_color)
         
         painter.setBrush(QBrush(gradient))
         
         # Draw with rounded corners for better appearance - more rounded
-        painter.drawRoundedRect(rect, 6, 6)
+        painter.drawRoundedRect(rect, border_radius, border_radius)
         
         # Draw note number inside if rectangle is big enough and labels are enabled
         if self.visual_config.get('show_note_labels', True) and rect_height > 14 and rect_width > 14:
@@ -775,10 +804,10 @@ class PianoRollWidget(QWidget):
             
             for note, (start_time, velocity) in self.active_notes.items():
                 if start_time < current_time:
-                    # Calculate particle spawn position - always on top of the note and at bottom of widget
-                    key_index = self.note_to_key_index(note)
-                    key_width = self.key_width(widget_width)
-                    note_x_start = self.key_index_to_x(key_index, widget_width)
+                    # Calculate particle spawn position using realistic piano layout
+                    key_info = self.get_key_info(note, widget_width)
+                    note_x_start = key_info.x
+                    note_width = key_info.width
                     
                     # Get base color for particles from gradient (use bottom of widget for particles)
                     base_color = self.position_to_gradient_color(widget_height, widget_height)
@@ -792,7 +821,7 @@ class PianoRollWidget(QWidget):
                     
                     for _ in range(num_particles):
                         # Spawn particles at random X position across the note width, at bottom Y
-                        px = note_x_start + random.uniform(0, key_width * self.particle_config['spawn_x_spread'])
+                        px = note_x_start + random.uniform(0, note_width * self.particle_config['spawn_x_spread'])
                         py = widget_height  # Always spawn at bottom of widget
                         
                         # Use configurable initial velocities
@@ -842,7 +871,7 @@ class PianoRollWidget(QWidget):
                         
                         for _ in range(num_sparks):
                             # Spawn sparks at random X position across the note width, at bottom Y
-                            spark_px = note_x_start + random.uniform(0, key_width * self.particle_config['spawn_x_spread'])
+                            spark_px = note_x_start + random.uniform(0, note_width * self.particle_config['spawn_x_spread'])
                             spark_py = widget_height  # Always spawn at bottom of widget
                             
                             # Use base particle velocity configuration but multiply by 1.5 for faster sparks
@@ -1084,6 +1113,29 @@ class PianoRollWidget(QWidget):
     def set_scroll_speed(self, speed: float):
         """Set the scroll speed for the piano roll"""
         self.SCROLL_SPEED = max(10, min(500, speed))  # Clamp between 10 and 500 pixels per second
+    
+    def set_note_width_scales(self, white_scale: float = None, black_scale: float = None, min_width: float = None):
+        """Set the width scaling factors for notes in the piano roll
+        
+        Args:
+            white_scale: Scale factor for white note widths (0.1-1.0), None to keep current
+            black_scale: Scale factor for black note widths (0.1-1.0), None to keep current  
+            min_width: Minimum note width in pixels, None to keep current
+        """
+        if white_scale is not None:
+            self.WHITE_NOTE_WIDTH_SCALE = max(0.1, min(1.0, white_scale))
+        if black_scale is not None:
+            self.BLACK_NOTE_WIDTH_SCALE = max(0.1, min(1.0, black_scale))
+        if min_width is not None:
+            self.MIN_NOTE_WIDTH = max(1, min_width)
+    
+    def get_note_width_scales(self):
+        """Get current note width scaling factors"""
+        return {
+            'white_scale': self.WHITE_NOTE_WIDTH_SCALE,
+            'black_scale': self.BLACK_NOTE_WIDTH_SCALE,
+            'min_width': self.MIN_NOTE_WIDTH
+        }
     
     def update_particle_config(self, **kwargs):
         """Update particle configuration parameters

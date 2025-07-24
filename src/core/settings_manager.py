@@ -23,13 +23,13 @@ class SettingsManager(QObject):
             if os.name == 'nt':  # Windows
                 appdata = os.environ.get('APPDATA')
                 if appdata:
-                    settings_dir = os.path.join(appdata, 'AudioInputStreamer')
+                    settings_dir = os.path.join(appdata, 'Midivis')
                 else:
                     # Fallback to user home directory
-                    settings_dir = os.path.join(os.path.expanduser('~'), '.AudioInputStreamer')
+                    settings_dir = os.path.join(os.path.expanduser('~'), '.Midivis')
             else:
                 # Linux/Mac
-                settings_dir = os.path.join(os.path.expanduser('~'), '.AudioInputStreamer')
+                settings_dir = os.path.join(os.path.expanduser('~'), '.Midivis')
         else:
             # Running as script - use project directory for development
             settings_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -148,7 +148,7 @@ class SettingsManager(QObject):
     
     def get_show_piano_roll(self) -> bool:
         """Get whether to show piano roll view"""
-        return self.get_setting('show_piano_roll', False)
+        return self.get_setting('show_piano_roll', True)
     
     def set_show_piano_roll(self, show_piano_roll: bool):
         """Set whether to show piano roll view"""

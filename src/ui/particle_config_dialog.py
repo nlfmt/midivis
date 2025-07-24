@@ -21,7 +21,8 @@ class ColorDisplay(QWidget):
     
     def setColor(self, color):
         """Set the color from RGB tuple"""
-        if isinstance(color, tuple) and len(color) >= 3:
+        if len(color) >= 3:
+            print(f"Setting color to RGB: {color}")
             self.color = QColor(color[0], color[1], color[2])
             self.setToolTip(f"RGB: {color[0]}, {color[1]}, {color[2]}\nClick to change color")
             self.update()
@@ -62,9 +63,6 @@ class PianoRollConfigDialog(QDialog):
         self.setWindowTitle("Piano Roll Configuration")
         self.setMinimumSize(450, 500)
         self.resize(500, 650)
-        
-        # Store original config for reset functionality
-        self.original_config = piano_roll.get_particle_config()
         
         # Set custom stylesheet for the dialog - make it specific to avoid affecting child dialogs
         self.setStyleSheet("""
@@ -865,6 +863,7 @@ class PianoRollConfigDialog(QDialog):
         
         # Load current gradient colors - now in top, middle, bottom order
         colors = gradient_config['colors']
+        print(f"Loaded gradient colors: {colors}")
         if len(colors) >= 3:
             # Set color displays to current gradient colors in the new order
             self.top_color_display.setColor(colors[0])      # First color = top

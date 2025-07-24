@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Audio Input Streamer - Qt Version
+Midivis
 
 A professional audio streaming application that allows you to stream audio 
 from any Windows audio device to your output, with mute functionality.
@@ -49,9 +49,9 @@ def setup_application():
     app = QApplication(sys.argv)
     
     # Set application properties
-    app.setApplicationName("Audio Input Streamer")
+    app.setApplicationName("Midivis")
     app.setApplicationVersion("1.0.0")
-    app.setOrganizationName("Audio Streamer Team")
+    app.setOrganizationName("nlfmt")
     
     # Set application icon
     icon_path = get_icon_path()

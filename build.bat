@@ -1,5 +1,5 @@
 @echo off
-echo Building Audio Input Streamer...
+echo Building Midivis...
 
 REM Get the directory where this script is located (project root)
 set "PROJECT_ROOT=%~dp0"
@@ -15,7 +15,7 @@ if exist "%PROJECT_ROOT%build" rmdir /s /q "%PROJECT_ROOT%build"
 REM Build with PyInstaller
 echo Building executable...
 cd /d "%PROJECT_ROOT%"
-python -m PyInstaller AudioInputStreamer.spec
+python -m PyInstaller Midivis.spec
 
 if errorlevel 1 (
     echo Build failed!
@@ -25,5 +25,5 @@ if errorlevel 1 (
 
 echo.
 echo Build completed successfully!
-echo Executable location: %PROJECT_ROOT%dist\AudioInputStreamer.exe
+echo Executable location: %PROJECT_ROOT%dist\Midivis.exe
 echo.

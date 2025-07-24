@@ -82,10 +82,10 @@ class MainWindow(QMainWindow):
         self.input_device_map = {}  # Maps display names to device objects
         self.output_device_map = {}  # Maps display names to device objects
         self.midi_device_map = {}   # Maps display names to MIDI device objects
-        self.show_piano_roll = False  # Toggle between spectrum and piano roll
+        self.show_piano_roll = True  # Toggle between spectrum and piano roll
         
         # Setup window
-        self.setWindowTitle("Audio Input Streamer")
+        self.setWindowTitle("Midivis")
         
         # Setup UI and connections
         self.setup_ui()
@@ -241,7 +241,7 @@ class MainWindow(QMainWindow):
                 print(f"Failed to initialize piano roll: {e}")
         
         # Update visualization widget based on current setting
-        self.update_visualization_widgets()
+        self.update_visualization_widget()
     
     def on_device_load_error(self, error_message):
         """Handle error loading devices"""
@@ -251,8 +251,8 @@ class MainWindow(QMainWindow):
 
     def setup_ui(self):
         """Setup the user interface"""
-        self.setMinimumSize(350, 200)  # Reduced minimum size since we removed device rows
-        self.resize(450, 350)  # Reduced default size
+        self.setMinimumSize(900, 400)  # Reduced minimum size since we removed device rows
+        self.resize(1024, 720)  # Reduced default size
         
         # Central widget
         central_widget = QWidget()
@@ -645,7 +645,7 @@ class MainWindow(QMainWindow):
         
         # Provide visual feedback in the window title
         original_title = self.windowTitle()
-        self.setWindowTitle("Audio Input Streamer (Playing Demo...)")
+        self.setWindowTitle("Midivis (Playing Demo...)")
         
         # Start the demo sequence
         self.midi_manager.start_demo_mode()
@@ -789,7 +789,7 @@ class MainWindow(QMainWindow):
     
     def update_status(self, message: str, color: str):
         """Update status in the window title"""
-        self.setWindowTitle(f"Audio Input Streamer - {message}")
+        self.setWindowTitle(f"Midivis - {message}")
     
     def on_streaming_started(self, device_name: str):
         """Handle streaming started"""
