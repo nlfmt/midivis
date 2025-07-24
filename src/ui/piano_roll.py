@@ -6,6 +6,8 @@ import random
 import math
 from typing import Dict, List, Tuple
 
+from src.core.settings_manager import SettingsManager
+
 
 class Particle:
     """A single particle for visual effects"""
@@ -143,8 +145,10 @@ class ParticleUpdateWorker(QThread):
 class PianoRollWidget(QWidget):
     """Piano roll waterfall visualization showing MIDI notes over time"""
     
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, settings_manager: SettingsManager = None):
         super().__init__(parent)
+        
+        self.settings_manager = settings_manager
         
         # Piano constants
         self.NUM_KEYS = 88  # Standard piano has 88 keys
@@ -167,7 +171,7 @@ class PianoRollWidget(QWidget):
         self.last_particle_time = 0.0
         
         # Particle system configuration - centralized parameters for easy tweaking
-        self.particle_config = {
+        default_particle_config = {
             'enabled': True,                       # global switch for the particle system
             'spawn_rate': 0.01,                    # seconds between particle spawns per active note
             'initial_velocity_x_min': -5.0,       # minimum initial X velocity
@@ -199,6 +203,7 @@ class PianoRollWidget(QWidget):
             'spark_life_max': 2.0,                # maximum spark life in seconds (increased for visibility)
             'spark_count_ratio': 0.8,             # ratio of sparks to regular particles (increased for more sparks)
         }
+        self.particle_config = { **default_particle_config, **self.settings_manager.get_particle_config() }
         
         # Initialize particle pools for regular and spark particles
         self.particle_pool = ParticlePool(self.particle_config['max_particles'])
@@ -226,7 +231,7 @@ class PianoRollWidget(QWidget):
         
         # Static gradient configuration for note coloring
         # Notes will be colored based on their Y position, not velocity
-        self.gradient_config = {
+        default_gradient_config = {
             'enabled': True,  # Enable gradient coloring
             'colors': [
                 (255, 50, 50),    # Red (top of widget)
@@ -235,7 +240,8 @@ class PianoRollWidget(QWidget):
             ],
             'positions': [0.0, 0.5, 1.0],  # Relative positions (0=top, 1=bottom)
         }
-        
+        self.gradient_config = { **default_gradient_config, **self.settings_manager.get_gradient_config() }
+
         # Visual settings configuration
         self.visual_config = {
             'show_note_labels': False,  # Show note labels (C4, D4, etc.) inside notes
@@ -450,12 +456,18 @@ class PianoRollWidget(QWidget):
             painter.setBrush(QBrush(QColor(8, 8, 8)))
             painter.drawRoundedRect(QRectF(self.rect()), 8, 8)
             
-            # Create rounded rectangle path for clipping content
-            content_rect = QRectF(self.rect())
+            # Define the border radius as a variable for easy changes
+            border_radius = 8
+
+            # Create rounded rectangle path for clipping content with only top corners rounded
             content_path = QPainterPath()
-            content_path.addRoundedRect(content_rect, 8, 8)
-            
-            # Set clipping path for rounded corners
+            content_path.moveTo(0, self.rect().height())
+            content_path.lineTo(0, border_radius)
+            content_path.quadTo(0, 0, border_radius, 0)
+            content_path.lineTo(self.rect().width() - border_radius, 0)
+            content_path.quadTo(self.rect().width(), 0, self.rect().width(), border_radius)
+            content_path.lineTo(self.rect().width(), self.rect().height())
+            content_path.lineTo(0, self.rect().height())
             painter.setClipPath(content_path)
             
             # Draw piano key guides with white/black key visualization
@@ -1101,6 +1113,7 @@ class PianoRollWidget(QWidget):
             else:
                 print(f"Warning: Unknown particle config parameter: {key}")
                 print(f"Available parameters: {list(self.particle_config.keys())}")
+        self.settings_manager.set_particle_config(self.particle_config)
     
     def get_particle_config(self):
         """Get current particle configuration"""
@@ -1120,6 +1133,7 @@ class PianoRollWidget(QWidget):
             else:
                 print(f"Warning: Unknown gradient config parameter: {key}")
                 print(f"Available parameters: {list(self.gradient_config.keys())}")
+        self.settings_manager.set_gradient_config(self.gradient_config)
     
     def get_gradient_config(self):
         """Get current gradient configuration"""

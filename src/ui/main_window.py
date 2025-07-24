@@ -225,7 +225,7 @@ class MainWindow(QMainWindow):
                 except ImportError:
                     from ui.piano_roll import PianoRollWidget
                 
-                self.piano_roll = PianoRollWidget(parent=central_widget)
+                self.piano_roll = PianoRollWidget(parent=central_widget, settings_manager=self.settings_manager)
                 self.piano_roll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
                 self.piano_roll.setMinimumHeight(200)
                 
@@ -241,7 +241,7 @@ class MainWindow(QMainWindow):
                 print(f"Failed to initialize piano roll: {e}")
         
         # Update visualization widget based on current setting
-        self.update_visualization_widget()
+        self.update_visualization_widgets()
     
     def on_device_load_error(self, error_message):
         """Handle error loading devices"""
@@ -260,11 +260,12 @@ class MainWindow(QMainWindow):
         
         # Main layout
         layout = QVBoxLayout(central_widget)
-        layout.setSpacing(12)
+        layout.setSpacing(0)
         layout.setContentsMargins(12, 12, 12, 12)
         
         # Single toolbar row with all controls
         self.toolbar = QWidget()
+        self.toolbar.setContentsMargins(0, 0, 0, 12)
         toolbar_row = QHBoxLayout(self.toolbar)
         toolbar_row.setSpacing(8)
         toolbar_row.setContentsMargins(0, 0, 0, 0)
@@ -434,6 +435,14 @@ class MainWindow(QMainWindow):
         
         layout.addWidget(self.toolbar)
         
+        visualizer_widget = QWidget()
+        visualizer_widget.setContentsMargins(0, 0, 0, 0)
+        visualizer_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.visualizer_layout = QVBoxLayout(visualizer_widget)
+        self.visualizer_layout.setSpacing(0)
+        self.visualizer_layout.setContentsMargins(0, 0, 0, 0)
+        # self.visualizer_layout
+
         # Placeholder for visualization widgets - will be replaced with actual widgets when needed
         self.spectrum_placeholder = QLabel("Loading visualization...")
         self.spectrum_placeholder.setMinimumHeight(120)
@@ -441,11 +450,12 @@ class MainWindow(QMainWindow):
         self.spectrum_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.spectrum_placeholder.setStyleSheet("""
             background-color: #1e1e1e; 
-            border: 1px solid #444;
             color: #888;
             font-size: 12px;
         """)
-        layout.addWidget(self.spectrum_placeholder, 1)
+        self.visualizer_layout.addWidget(self.spectrum_placeholder, 1)
+        
+        layout.addWidget(visualizer_widget)
         
         # Initialize device combo boxes for internal use (not displayed)
         self.input_device_combo = QComboBox()
@@ -459,10 +469,27 @@ class MainWindow(QMainWindow):
         self.midi_device_combo = QComboBox()
         self.midi_device_combo.addItem("Loading MIDI devices...")
         self.midi_device_combo.setEnabled(False)
+
         
         # Will be replaced later
         self.spectrum_analyzer = None
         self.piano_roll = None
+        self.keyboard_visualizer = None
+
+        try:
+            from .keyboard_visualizer import KeyboardVisualizer
+            
+            self.keyboard_visualizer = KeyboardVisualizer(parent=self.centralWidget(), settings_manager=self.settings_manager)
+            self.keyboard_visualizer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            self.keyboard_visualizer.setMinimumHeight(50)
+            layout.addWidget(self.keyboard_visualizer)
+
+            # Connect MIDI signals to the keyboard visualizer
+            self.midi_manager.note_on.connect(self.keyboard_visualizer.highlight_key_on)
+            self.midi_manager.note_off.connect(self.keyboard_visualizer.highlight_key_off)
+        
+        except Exception as e:
+            print(f"Failed to initialize keyboard visualizer: {e}")
     
     def setup_connections(self):
         """Setup signal-slot connections"""
@@ -857,7 +884,8 @@ class MainWindow(QMainWindow):
     
     def update_visualization_widget(self):
         """Update which visualization widget is shown"""
-        layout = self.centralWidget().layout()
+        # layout = self.centralWidget().layout()
+        layout = self.visualizer_layout
         
         # Get the current visualization widget or placeholder
         current_widget = None
@@ -877,6 +905,7 @@ class MainWindow(QMainWindow):
                 
             if current_widget != self.piano_roll:
                 # Replace current widget with piano roll
+                self.keyboard_visualizer.show()
                 layout.removeWidget(current_widget)
                 current_widget.hide()
                 current_widget.setParent(None)
@@ -904,6 +933,7 @@ class MainWindow(QMainWindow):
                 
             if current_widget != self.spectrum_analyzer:
                 # Replace current widget with spectrum analyzer
+                self.keyboard_visualizer.hide()
                 layout.removeWidget(current_widget)
                 current_widget.hide()
                 current_widget.setParent(None)
@@ -924,3 +954,10 @@ class MainWindow(QMainWindow):
         # Save preference
         self.settings_manager.set_show_piano_roll(self.show_piano_roll)
         self.settings_manager.save_settings()
+    
+    def resizeEvent(self, event):
+        """Adjust the keyboard visualizer height to 10% of the window height."""
+        super().resizeEvent(event)
+        if self.keyboard_visualizer:
+            new_height = int(self.height() * 0.1)  # 10% of the window height
+            self.keyboard_visualizer.setFixedHeight(new_height)

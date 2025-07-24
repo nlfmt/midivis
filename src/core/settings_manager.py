@@ -169,3 +169,19 @@ class SettingsManager(QObject):
     def set_midi_delay(self, delay_ms: int):
         """Set MIDI delay compensation in milliseconds"""
         self.set_setting('midi_delay', delay_ms)
+        
+    def get_particle_config(self) -> dict:
+        """Get particle system configuration"""
+        return self.get_setting('particle_config', {})
+    
+    def set_particle_config(self, config: dict):
+        """Set particle system configuration"""
+        self.set_setting('particle_config', config)
+        
+    def get_gradient_config(self) -> dict:
+        """Get gradient configuration for piano roll"""
+        return self.get_setting('gradient_config', {})
+    
+    def set_gradient_config(self, config: dict):
+        """Set gradient configuration for piano roll"""
+        self.set_setting('gradient_config', config)

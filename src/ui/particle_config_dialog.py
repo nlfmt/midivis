@@ -416,6 +416,16 @@ class PianoRollConfigDialog(QDialog):
         self.connect_slider_spinbox(self.damping_slider, self.damping_spinbox, 'damping_factor')
         row += 1
         
+        # Particles Per Note Base
+        particles_layout.addWidget(QLabel("Particles Per Note Base:"), row, 0)
+        self.particles_per_note_base_slider = self.create_slider(1, 10, 2, 1)
+        self.particles_per_note_base_spinbox = QSpinBox()
+        self.particles_per_note_base_spinbox.setRange(1, 10)
+        particles_layout.addWidget(self.particles_per_note_base_slider, row, 1)
+        particles_layout.addWidget(self.particles_per_note_base_spinbox, row, 2)
+        self.connect_slider_spinbox(self.particles_per_note_base_slider, self.particles_per_note_base_spinbox, 'particles_per_note_base')
+        row += 1
+        
         layout.addWidget(particles_group)
         
         # Gradient Configuration Group
