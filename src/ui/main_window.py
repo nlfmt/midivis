@@ -208,6 +208,7 @@ class MainWindow(QMainWindow):
                 
                 self.spectrum_analyzer = SpectrumAnalyzer(parent=central_widget)
                 self.spectrum_analyzer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+                self.spectrum_analyzer.fullscreen = self.isFullScreen()  # Set fullscreen state
                 self.spectrum_analyzer.setMinimumHeight(200)
                 
                 # Connect audio signal
@@ -226,6 +227,7 @@ class MainWindow(QMainWindow):
                     from ui.piano_roll import PianoRollWidget
                 
                 self.piano_roll = PianoRollWidget(parent=central_widget, settings_manager=self.settings_manager)
+                self.piano_roll.fullscreen = self.isFullScreen()
                 self.piano_roll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
                 self.piano_roll.setMinimumHeight(200)
                 
@@ -484,6 +486,7 @@ class MainWindow(QMainWindow):
             
             self.keyboard_visualizer = KeyboardVisualizer(parent=self.centralWidget(), settings_manager=self.settings_manager)
             self.keyboard_visualizer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            self.keyboard_visualizer.fullscreen = self.isFullScreen()  # Set fullscreen state
             self.keyboard_visualizer.setMinimumHeight(50)
             layout.addWidget(self.keyboard_visualizer)
 
@@ -656,33 +659,37 @@ class MainWindow(QMainWindow):
         # Restore title after demo duration (approximately 10 seconds)
         QTimer.singleShot(10000, lambda: self.setWindowTitle(original_title))
         
+    def enable_fullscreen(self):
+        self.setWindowState(self.windowState() | Qt.WindowState.WindowFullScreen)
+        self.root_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins in fullscreen
+        self.root_layout.removeWidget(self.toolbar)
+        # Reparent and make floating
+        self.toolbar.setParent(self)
+        self.toolbar.raise_()
+        self.toolbar.setGeometry(12, 12, self.width() - 24, 50)
+        self.toolbar.setContentsMargins(8, 8, 8, 8)
+        self.toolbar.show()
+        self.piano_roll.fullscreen = True
+        self.keyboard_visualizer.fullscreen = True
+        self.spectrum_analyzer.fullscreen = True
+        
+    def disable_fullscreen(self):
+        self.setWindowState(self.windowState() & ~Qt.WindowState.WindowFullScreen)
+        self.root_layout.setContentsMargins(12, 12, 12, 12) # Remove margins in fullscreen
+        # Restore toolbar to layout
+        self.toolbar.setParent(self)
+        self.toolbar.setContentsMargins(0, 0, 0, 12)
+        self.root_layout.insertWidget(0, self.toolbar)
+        self.piano_roll.fullscreen = False
+        self.keyboard_visualizer.fullscreen = False
+        self.spectrum_analyzer.fullscreen = False
+        
     def toggle_fullscreen(self):
+        """Toggle fullscreen mode"""
         if self.isFullScreen():
-            self.setWindowState(self.windowState() & ~Qt.WindowState.WindowFullScreen)
-            self.root_layout.setContentsMargins(12, 12, 12, 12) # Remove margins in fullscreen
-
-            # Restore toolbar to layout
-            self.toolbar.setParent(self)
-            self.toolbar.setContentsMargins(0, 0, 0, 12)
-            self.root_layout.insertWidget(0, self.toolbar)
-            self.piano_roll.fullscreen = False
-            self.keyboard_visualizer.fullscreen = False
-            self.spectrum_analyzer.fullscreen = False
+            self.disable_fullscreen()
         else:
-            self.setWindowState(self.windowState() | Qt.WindowState.WindowFullScreen)
-            self.root_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins in fullscreen
-
-            self.root_layout.removeWidget(self.toolbar)
-
-            # Reparent and make floating
-            self.toolbar.setParent(self)
-            self.toolbar.raise_()
-            self.toolbar.setGeometry(12, 12, self.width() - 24, 50)
-            self.toolbar.setContentsMargins(8, 8, 8, 8)
-            self.toolbar.show()
-            self.piano_roll.fullscreen = True
-            self.keyboard_visualizer.fullscreen = True
-            self.spectrum_analyzer.fullscreen = True
+            self.enable_fullscreen()
             
             
     def toggle_toolbar(self):
@@ -846,6 +853,9 @@ class MainWindow(QMainWindow):
         if geometry:
             try:
                 self.restoreGeometry(geometry)
+                screen_geometry = QApplication.primaryScreen().geometry()
+                if self.geometry() == screen_geometry:
+                    self.enable_fullscreen()
             except:
                 pass  # Ignore geometry restore errors
         
