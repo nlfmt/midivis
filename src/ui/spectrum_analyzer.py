@@ -16,6 +16,8 @@ class SpectrumAnalyzer(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         
+        self.fullscreen = False
+        
         # Spectrum parameters
         self.sample_rate = 44100
         self.fft_size = 4096  # Increased from 2048 for even better frequency resolution
@@ -183,10 +185,12 @@ class SpectrumAnalyzer(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
         # Draw rounded background frame
+        border_radius = 0 if self.fullscreen else 8
+
         frame_rect = self.rect().adjusted(0, 0, 0, 0)  # No extra margin - use layout margin only
         painter.setPen(QPen(QColor(51, 51, 51), 1))  # Border color
         painter.setBrush(QBrush(self.bg_color))
-        painter.drawRoundedRect(frame_rect, 8, 8)  # Rounded corners
+        painter.drawRoundedRect(frame_rect, border_radius, border_radius)  # Rounded corners
         
         if self.num_bars == 0:
             return

@@ -260,12 +260,15 @@ class MainWindow(QMainWindow):
         
         # Main layout
         layout = QVBoxLayout(central_widget)
+        self.root_layout = layout  # Store reference to root layout for later use
         layout.setSpacing(0)
         layout.setContentsMargins(12, 12, 12, 12)
         
         # Single toolbar row with all controls
         self.toolbar = QWidget()
         self.toolbar.setContentsMargins(0, 0, 0, 12)
+        self.toolbar.setObjectName("toolbar")
+        self.toolbar.setStyleSheet("""#toolbar { border-radius: 8px; }""")
         toolbar_row = QHBoxLayout(self.toolbar)
         toolbar_row.setSpacing(8)
         toolbar_row.setContentsMargins(0, 0, 0, 0)
@@ -656,8 +659,31 @@ class MainWindow(QMainWindow):
     def toggle_fullscreen(self):
         if self.isFullScreen():
             self.setWindowState(self.windowState() & ~Qt.WindowState.WindowFullScreen)
+            self.root_layout.setContentsMargins(12, 12, 12, 12) # Remove margins in fullscreen
+
+            # Restore toolbar to layout
+            self.toolbar.setParent(self)
+            self.toolbar.setContentsMargins(0, 0, 0, 12)
+            self.root_layout.insertWidget(0, self.toolbar)
+            self.piano_roll.fullscreen = False
+            self.keyboard_visualizer.fullscreen = False
+            self.spectrum_analyzer.fullscreen = False
         else:
             self.setWindowState(self.windowState() | Qt.WindowState.WindowFullScreen)
+            self.root_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins in fullscreen
+
+            self.root_layout.removeWidget(self.toolbar)
+
+            # Reparent and make floating
+            self.toolbar.setParent(self)
+            self.toolbar.raise_()
+            self.toolbar.setGeometry(12, 12, self.width() - 24, 50)
+            self.toolbar.setContentsMargins(8, 8, 8, 8)
+            self.toolbar.show()
+            self.piano_roll.fullscreen = True
+            self.keyboard_visualizer.fullscreen = True
+            self.spectrum_analyzer.fullscreen = True
+            
             
     def toggle_toolbar(self):
         if self.toolbar.isVisible():

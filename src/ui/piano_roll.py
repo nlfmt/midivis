@@ -193,6 +193,7 @@ class PianoRollWidget(QWidget):
         super().__init__(parent)
         
         self.settings_manager = settings_manager
+        self.fullscreen = False
         
         # Piano constants
         self.NUM_KEYS = 88  # Standard piano has 88 keys
@@ -481,13 +482,13 @@ class PianoRollWidget(QWidget):
             # Clear the entire widget with transparent background first
             painter.fillRect(self.rect(), QColor(0, 0, 0, 0))
             
+            border_radius = 0 if self.fullscreen else 8
             # Draw rounded background - much darker for better effect visibility
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QBrush(QColor(8, 8, 8)))
-            painter.drawRoundedRect(QRectF(self.rect()), 8, 8)
+            painter.drawRoundedRect(QRectF(self.rect()), border_radius, border_radius)
             
             # Define the border radius as a variable for easy changes
-            border_radius = 8
 
             # Create rounded rectangle path for clipping content with only top corners rounded
             content_path = QPainterPath()

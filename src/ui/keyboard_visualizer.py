@@ -11,6 +11,7 @@ class KeyboardVisualizer(QWidget):
         super().__init__(parent)
 
         self.settings_manager = settings_manager
+        self.fullscreen = False
 
         self.setMinimumSize(QSize(600, 80))
         self.setMaximumHeight(100)
@@ -43,7 +44,7 @@ class KeyboardVisualizer(QWidget):
         key_height = self.height()
 
         # Define the roundness as an adjustable variable
-        corner_radius = 8 
+        corner_radius = 0 if self.fullscreen else 8 
 
         painter.setRenderHint(QPainter.Antialiasing)
 

@@ -13,7 +13,6 @@ def _get_rtmidi():
             import rtmidi
             _rtmidi = rtmidi
         except ImportError:
-            print("python-rtmidi not installed. Install with: pip install python-rtmidi")
             raise
     return _rtmidi
 

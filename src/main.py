@@ -67,7 +67,6 @@ def setup_application():
 def setup_signal_handlers(window):
     """Setup signal handlers for graceful shutdown"""
     def signal_handler(signum, frame):
-        print(f"\nReceived signal {signum}, shutting down gracefully...")
         if window:
             window.close()
         QApplication.quit()
@@ -106,7 +105,6 @@ def main():
         sys.exit(app.exec())
         
     except KeyboardInterrupt:
-        print("\nApplication interrupted by user")
         sys.exit(0)
     except Exception as e:
         print(f"Fatal error: {e}")
