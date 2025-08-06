@@ -62,3 +62,6 @@ Should be installable the same way as linux, but the application has not been te
 
 ## License
 This project is licensed under the MIT License
+
+
+<!-- GitAds-Verify: YDYBREAVSCDLE8EOTAEAVBHBSE4V9O6C -->
