@@ -64,4 +64,8 @@ Should be installable the same way as linux, but the application has not been te
 This project is licensed under the MIT License
 
 
+## GitAds Sponsored
+[![Sponsored by GitAds](https://gitads.dev/v1/ad-serve?source=nlfmt/midivis@github)](https://gitads.dev/v1/ad-track?source=nlfmt/midivis@github)
+
+
 <!-- GitAds-Verify: YDYBREAVSCDLE8EOTAEAVBHBSE4V9O6C -->
